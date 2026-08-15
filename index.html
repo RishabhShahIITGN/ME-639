@@ -1,1 +1,129 @@
-<h1>My Robotics Visualizer is coming soon!</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Rotation Matrix Visualizer</title>
+    <style>
+        /* CSS: This handles the styling and layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        /* Flexbox is used here to put the canvas and controls side-by-side */
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            justify-content: center;
+        }
+
+        .canvas-container {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 320px;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px;
+            background: #eef2f5;
+            border-radius: 8px;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .data-section {
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+            color: #444;
+        }
+
+        /* Styling for the 2x2 Matrix to make it look like math */
+        .matrix-display {
+            font-family: 'Courier New', Courier, monospace;
+            background: #282c34;
+            color: #61afef;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1.4rem;
+            line-height: 1.5;
+            letter-spacing: 2px;
+        }
+
+        .coordinate-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Rigid Body Rotation Visualizer</h1>
+
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="visualizerCanvas" width="500" height="500"></canvas>
+        </div>
+        
+        <div class="controls">
+            
+            <div class="slider-container">
+                <label for="angleSlider">Rotation Angle (&theta;): <span id="angleValue">0&deg;</span></label>
+                <input type="range" id="angleSlider" min="0" max="360" value="0">
+            </div>
+            
+            <div class="data-section">
+                <h3>Rotation Matrix (Ground to Body)</h3>
+                <div class="matrix-display" id="matrixDisplay">
+                    [ 1.00,  0.00 ]<br>
+                    [ 0.00,  1.00 ]
+                </div>
+            </div>
+
+            <div class="data-section">
+                <h3>Reference Point Coordinates</h3>
+                <p>Body Frame (Fixed): <span class="coordinate-text">(2.00, 2.00)</span></p>
+                <p>Ground Frame: <span class="coordinate-text" id="groundCoords">(2.00, 2.00)</span></p>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
