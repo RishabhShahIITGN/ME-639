@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Rotation Matrix Visualizer</title>
+    <title>3D Rotation Matrix Visualizer</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
     <style>
-        /* CSS: This handles the styling and layout */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -19,9 +22,9 @@
 
         h1 {
             margin-bottom: 20px;
+            text-align: center;
         }
 
-        /* Flexbox is used here to put the canvas and controls side-by-side */
         .container {
             display: flex;
             flex-wrap: wrap;
@@ -31,32 +34,54 @@
             border-radius: 12px;
             box-shadow: 0 8px 16px rgba(0,0,0,0.1);
             justify-content: center;
+            max-width: 1000px;
         }
 
         .canvas-container {
             border: 2px solid #ddd;
             border-radius: 8px;
-            background-color: #fafafa;
+            background-color: #1e1e1e;
+            overflow: hidden;
+            width: 500px;
+            height: 500px;
         }
 
         .controls {
             display: flex;
             flex-direction: column;
             gap: 20px;
-            width: 320px;
+            width: 350px;
         }
 
-        .slider-container {
+        .slider-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             padding: 15px;
             background: #eef2f5;
             border-radius: 8px;
         }
 
+        .slider-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .slider-row input {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+
         label {
             font-weight: bold;
+            min-width: 100px;
+        }
+
+        .val-display {
+            min-width: 45px;
+            text-align: right;
+            font-family: monospace;
             font-size: 1.1rem;
         }
 
@@ -68,12 +93,11 @@
 
         h3 {
             margin-top: 0;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             font-size: 1.1rem;
             color: #444;
         }
 
-        /* Styling for the 2x2 Matrix to make it look like math */
         .matrix-display {
             font-family: 'Courier New', Courier, monospace;
             background: #282c34;
@@ -81,142 +105,174 @@
             padding: 15px;
             border-radius: 6px;
             text-align: center;
-            font-size: 1.4rem;
-            line-height: 1.5;
+            font-size: 1.3rem;
+            line-height: 1.8;
             letter-spacing: 2px;
+            white-space: pre;
         }
 
-        .coordinate-text {
-            font-family: 'Courier New', Courier, monospace;
+        .legend {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
             font-weight: bold;
+            justify-content: center;
+            margin-top: 10px;
         }
+        .legend span { padding: 4px 8px; border-radius: 4px; }
+        .x-axis { background: #ffcccc; color: #cc0000; }
+        .y-axis { background: #ccffcc; color: #008800; }
+        .z-axis { background: #ccccff; color: #0000cc; }
     </style>
 </head>
 <body>
 
-    <h1>Rigid Body Rotation Visualizer</h1>
+    <h1>3D Rigid Body Rotation Visualizer</h1>
 
     <div class="container">
-        <div class="canvas-container">
-            <canvas id="visualizerCanvas" width="500" height="500"></canvas>
-        </div>
+        <div class="canvas-container" id="canvasContainer">
+            </div>
         
         <div class="controls">
             
-            <div class="slider-container">
-                <label for="angleSlider">Rotation Angle (&theta;): <span id="angleValue">0&deg;</span></label>
-                <input type="range" id="angleSlider" min="0" max="360" value="0">
+            <div class="slider-group">
+                <h3>Euler Angles (Degrees)</h3>
+                
+                <div class="slider-row">
+                    <label style="color: #ff3333;">Roll (X):</label>
+                    <input type="range" id="xSlider" min="-180" max="180" value="0">
+                    <span class="val-display" id="xVal">0&deg;</span>
+                </div>
+                
+                <div class="slider-row">
+                    <label style="color: #33cc33;">Pitch (Y):</label>
+                    <input type="range" id="ySlider" min="-180" max="180" value="0">
+                    <span class="val-display" id="yVal">0&deg;</span>
+                </div>
+                
+                <div class="slider-row">
+                    <label style="color: #3366ff;">Yaw (Z):</label>
+                    <input type="range" id="zSlider" min="-180" max="180" value="0">
+                    <span class="val-display" id="zVal">0&deg;</span>
+                </div>
+
+                <div class="legend">
+                    <span class="x-axis">X Axis (Red)</span>
+                    <span class="y-axis">Y Axis (Green)</span>
+                    <span class="z-axis">Z Axis (Blue)</span>
+                </div>
+                <p style="font-size: 0.8rem; text-align: center; margin-bottom: 0;"><em>Tip: Click and drag the 3D canvas to rotate the camera.</em></p>
             </div>
             
             <div class="data-section">
-                <h3>Rotation Matrix (Ground to Body)</h3>
+                <h3>3x3 Rotation Matrix</h3>
                 <div class="matrix-display" id="matrixDisplay">
-                    [ 1.00,  0.00 ]<br>
-                    [ 0.00,  1.00 ]
+[ 1.00,  0.00,  0.00 ]
+[ 0.00,  1.00,  0.00 ]
+[ 0.00,  0.00,  1.00 ]
                 </div>
-            </div>
-
-            <div class="data-section">
-                <h3>Reference Point Coordinates</h3>
-                <p>Body Frame (Fixed): <span class="coordinate-text">(2.00, 2.00)</span></p>
-                <p>Ground Frame: <span class="coordinate-text" id="groundCoords">(2.00, 2.00)</span></p>
             </div>
 
         </div>
     </div>
+
     <script>
-        // 1. Grab the elements from our HTML
-        const canvas = document.getElementById('visualizerCanvas');
-        const ctx = canvas.getContext('2d');
-        const angleSlider = document.getElementById('angleSlider');
-        const angleValueDisplay = document.getElementById('angleValue');
+        // --- 1. SETUP THREE.JS SCENE ---
+        const container = document.getElementById('canvasContainer');
+        const scene = new THREE.Scene();
+        
+        // Add a grid for spatial reference
+        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+        scene.add(gridHelper);
+
+        // Setup Camera
+        const camera = new THREE.PerspectiveCamera(50, 500 / 500, 0.1, 1000);
+        camera.position.set(4, 4, 6); // Position camera diagonally above
+
+        // Setup Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(500, 500);
+        container.appendChild(renderer.domElement);
+
+        // Setup OrbitControls (Mouse interaction)
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // --- 2. CREATE COORDINATE FRAMES ---
+        
+        // Global Frame (Fixed, semi-transparent)
+        const globalAxes = new THREE.AxesHelper(4);
+        globalAxes.material.transparent = true;
+        globalAxes.material.opacity = 0.3;
+        scene.add(globalAxes);
+
+        // Body Frame (Rotating)
+        const bodyAxes = new THREE.AxesHelper(3);
+        // Make the body axes thicker for visibility
+        bodyAxes.material.linewidth = 3; 
+        scene.add(bodyAxes);
+
+        // --- 3. UI AND MATH LOGIC ---
+        
+        const xSlider = document.getElementById('xSlider');
+        const ySlider = document.getElementById('ySlider');
+        const zSlider = document.getElementById('zSlider');
+        
+        const xVal = document.getElementById('xVal');
+        const yVal = document.getElementById('yVal');
+        const zVal = document.getElementById('zVal');
+        
         const matrixDisplay = document.getElementById('matrixDisplay');
-        const groundCoordsDisplay = document.getElementById('groundCoords');
 
-        // Reference Point P in the Body Frame (fixed)
-        const P_body = { x: 2, y: 2 };
-        const scale = 50; // Scales the math units to pixels (1 unit = 50px)
+        function updateRotation() {
+            // Get values from sliders
+            const degX = parseFloat(xSlider.value);
+            const degY = parseFloat(ySlider.value);
+            const degZ = parseFloat(zSlider.value);
 
-        // 2. The main function to draw everything and do the math
-        function updateVisualizer() {
-            // Get the current angle from the slider and convert to radians
-            const degrees = parseInt(angleSlider.value);
-            const theta = degrees * (Math.PI / 180);
+            // Update text displays
+            xVal.innerHTML = `${degX}&deg;`;
+            yVal.innerHTML = `${degY}&deg;`;
+            zVal.innerHTML = `${degZ}&deg;`;
 
-            // Update the text showing the current angle
-            angleValueDisplay.innerHTML = `${degrees}&deg;`;
+            // Convert degrees to radians for math
+            const radX = THREE.MathUtils.degToRad(degX);
+            const radY = THREE.MathUtils.degToRad(degY);
+            const radZ = THREE.MathUtils.degToRad(degZ);
 
-            // Calculate the Rotation Matrix elements
-            const cosT = Math.cos(theta);
-            const sinT = Math.sin(theta);
+            // Apply rotations to the body frame (Order: XYZ)
+            bodyAxes.rotation.set(radX, radY, radZ, 'XYZ');
 
-            // Update the Matrix HTML display
-            matrixDisplay.innerHTML = `
-                [ ${cosT.toFixed(2)}, ${(-sinT).toFixed(2)} ]<br>
-                [ ${sinT.toFixed(2)},  ${cosT.toFixed(2)} ]
-            `;
+            // Force Three.js to update the matrix calculations immediately
+            bodyAxes.updateMatrixWorld();
 
-            // Calculate Point P in Ground Frame (Matrix Multiplication)
-            const P_ground_x = (cosT * P_body.x) + (-sinT * P_body.y);
-            const P_ground_y = (sinT * P_body.x) + (cosT * P_body.y);
+            // Extract the 4x4 matrix from Three.js and format as 3x3
+            // Three.js stores matrices as 1D arrays in column-major order
+            const e = bodyAxes.matrixWorld.elements;
             
-            // Update the Coordinate HTML display
-            groundCoordsDisplay.innerText = `(${P_ground_x.toFixed(2)}, ${P_ground_y.toFixed(2)})`;
-
-            // --- DRAWING ON THE CANVAS ---
-            // Clear the canvas for the new frame
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Format the output string
+            const mText = `[ ${e[0].toFixed(2).padStart(5)}, ${e[4].toFixed(2).padStart(5)}, ${e[8].toFixed(2).padStart(5)} ]\n` +
+                          `[ ${e[1].toFixed(2).padStart(5)}, ${e[5].toFixed(2).padStart(5)}, ${e[9].toFixed(2).padStart(5)} ]\n` +
+                          `[ ${e[2].toFixed(2).padStart(5)}, ${e[6].toFixed(2).padStart(5)}, ${e[10].toFixed(2).padStart(5)} ]`;
             
-            // Move the origin (0,0) to the center of the canvas
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            
-            // Note: In Canvas API, Y goes down. We flip it so Y goes up like standard math
-            ctx.scale(1, -1); 
-
-            // Draw Ground Frame (Fixed)
-            drawAxes('black', 'xg', 'yg');
-
-            // Draw Body Frame (Rotated)
-            ctx.save();
-            ctx.rotate(theta);
-            drawAxes('blue', 'xb', 'yb');
-            
-            // Draw Point P (fixed in the rotating body frame)
-            ctx.beginPath();
-            ctx.arc(P_body.x * scale, P_body.y * scale, 6, 0, 2 * Math.PI);
-            ctx.fillStyle = 'red';
-            ctx.fill();
-            ctx.restore(); // Restore back to ground frame orientation
-
-            ctx.restore(); // Restore origin back to top-left
+            matrixDisplay.innerText = mText;
         }
 
-        // Helper function to draw axes
-        function drawAxes(color, xLabel, yLabel) {
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = 2;
-            ctx.font = '16px Arial';
+        // Add event listeners to sliders
+        xSlider.addEventListener('input', updateRotation);
+        ySlider.addEventListener('input', updateRotation);
+        zSlider.addEventListener('input', updateRotation);
 
-            // X Axis
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(200, 0);
-            ctx.stroke();
-            
-            // Y Axis
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(0, 200);
-            ctx.stroke();
+        // --- 4. ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Required for OrbitControls damping
+            renderer.render(scene, camera);
         }
 
-        // 3. Listen for slider movement to trigger the update
-        angleSlider.addEventListener('input', updateVisualizer);
-
-        // 4. Run once on page load to draw the initial state
-        updateVisualizer();
+        // Initialize and start loop
+        updateRotation();
+        animate();
     </script>
 </body>
 </html>
