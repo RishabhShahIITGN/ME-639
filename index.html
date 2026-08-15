@@ -124,6 +124,99 @@
 
         </div>
     </div>
+<script>
+        // 1. Grab the elements from our HTML
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx = canvas.getContext('2d');
+        const angleSlider = document.getElementById('angleSlider');
+        const angleValueDisplay = document.getElementById('angleValue');
+        const matrixDisplay = document.getElementById('matrixDisplay');
+        const groundCoordsDisplay = document.getElementById('groundCoords');
 
+        // Reference Point P in the Body Frame (fixed)
+        const P_body = { x: 2, y: 2 };
+        const scale = 50; // Scales the math units to pixels (1 unit = 50px)
+
+        // 2. The main function to draw everything and do the math
+        function updateVisualizer() {
+            // Get the current angle from the slider and convert to radians
+            const degrees = parseInt(angleSlider.value);
+            const theta = degrees * (Math.PI / 180);
+
+            // Update the text showing the current angle
+            angleValueDisplay.innerHTML = `${degrees}&deg;`;
+
+            // Calculate the Rotation Matrix elements
+            const cosT = Math.cos(theta);
+            const sinT = Math.sin(theta);
+
+            // Update the Matrix HTML display
+            matrixDisplay.innerHTML = `
+                [ ${cosT.toFixed(2)}, ${(-sinT).toFixed(2)} ]<br>
+                [ ${sinT.toFixed(2)},  ${cosT.toFixed(2)} ]
+            `;
+
+            // Calculate Point P in Ground Frame (Matrix Multiplication)
+            const P_ground_x = (cosT * P_body.x) + (-sinT * P_body.y);
+            const P_ground_y = (sinT * P_body.x) + (cosT * P_body.y);
+            
+            // Update the Coordinate HTML display
+            groundCoordsDisplay.innerText = `(${P_ground_x.toFixed(2)}, ${P_ground_y.toFixed(2)})`;
+
+            // --- DRAWING ON THE CANVAS ---
+            // Clear the canvas for the new frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Move the origin (0,0) to the center of the canvas
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            
+            // Note: In Canvas API, Y goes down. We flip it so Y goes up like standard math
+            ctx.scale(1, -1); 
+
+            // Draw Ground Frame (Fixed)
+            drawAxes('black', 'xg', 'yg');
+
+            // Draw Body Frame (Rotated)
+            ctx.save();
+            ctx.rotate(theta);
+            drawAxes('blue', 'xb', 'yb');
+            
+            // Draw Point P (fixed in the rotating body frame)
+            ctx.beginPath();
+            ctx.arc(P_body.x * scale, P_body.y * scale, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = 'red';
+            ctx.fill();
+            ctx.restore(); // Restore back to ground frame orientation
+
+            ctx.restore(); // Restore origin back to top-left
+        }
+
+        // Helper function to draw axes
+        function drawAxes(color, xLabel, yLabel) {
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+            ctx.font = '16px Arial';
+
+            // X Axis
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(200, 0);
+            ctx.stroke();
+            
+            // Y Axis
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, 200);
+            ctx.stroke();
+        }
+
+        // 3. Listen for slider movement to trigger the update
+        angleSlider.addEventListener('input', updateVisualizer);
+
+        // 4. Run once on page load to draw the initial state
+        updateVisualizer();
+    </script>
 </body>
 </html>
