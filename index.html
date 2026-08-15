@@ -53,13 +53,14 @@
             width: 350px;
         }
 
-        .slider-group {
+        .slider-group, .data-section {
             display: flex;
             flex-direction: column;
             gap: 8px;
             padding: 15px;
             background: #eef2f5;
             border-radius: 8px;
+            border: 1px solid #eee;
         }
 
         .slider-row {
@@ -68,7 +69,7 @@
             justify-content: space-between;
         }
 
-        .slider-row input {
+        .slider-row input[type="range"] {
             flex-grow: 1;
             margin: 0 10px;
         }
@@ -85,15 +86,9 @@
             font-size: 1.1rem;
         }
 
-        .data-section {
-            padding: 15px;
-            border: 1px solid #eee;
-            border-radius: 8px;
-        }
-
         h3 {
             margin-top: 0;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             font-size: 1.1rem;
             color: #444;
         }
@@ -109,6 +104,32 @@
             line-height: 1.8;
             letter-spacing: 2px;
             white-space: pre;
+        }
+
+        /* New CSS for the Point Inputs */
+        .point-inputs {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .point-inputs label {
+            min-width: auto;
+            font-size: 0.9rem;
+        }
+        
+        .point-inputs input {
+            width: 50px;
+            padding: 4px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .coordinate-text {
+            font-family: monospace;
+            font-weight: bold;
+            color: #0056b3;
         }
 
         .legend {
@@ -130,8 +151,7 @@
     <h1>3D Rigid Body Rotation Visualizer</h1>
 
     <div class="container">
-        <div class="canvas-container" id="canvasContainer">
-            </div>
+        <div class="canvas-container" id="canvasContainer"></div>
         
         <div class="controls">
             
@@ -161,13 +181,29 @@
                     <span class="y-axis">Y Axis (Green)</span>
                     <span class="z-axis">Z Axis (Blue)</span>
                 </div>
-                <p style="font-size: 0.8rem; text-align: center; margin-bottom: 0;"><em>Tip: Click and drag the 3D canvas to rotate the camera.</em></p>
+                <p style="font-size: 0.8rem; text-align: center; margin-bottom: 0; margin-top: 10px;"><em>Tip: Click and drag the 3D canvas to rotate the camera.</em></p>
             </div>
             
+            <div class="data-section" style="background: white;">
+                <h3>3x3 Rotation Matrix</h3>
+                <div class="matrix-display" id="matrixDisplay">
+[ 1.00,  0.00,  0.00 ]
+[ 0.00,  1.00,  0.00 ]
+[ 0.00,  0.00,  1.00 ]
+                </div>
+            </div>
+
             <div class="data-section">
-                <h3>Point P Coordinates</h3>
-                <p>Body Frame: (2.00, 2.00, 2.00)</p>
-                <p>Ground Frame: <span id="groundCoords" style="font-family: monospace; font-weight: bold;">(2.00, 2.00, 2.00)</span></p>
+                <h3>Point P Customization</h3>
+                
+                <div class="point-inputs">
+                    <label>X: <input type="number" id="pX" value="2" step="0.5"></label>
+                    <label>Y: <input type="number" id="pY" value="2" step="0.5"></label>
+                    <label>Z: <input type="number" id="pZ" value="2" step="0.5"></label>
+                </div>
+                
+                <p style="margin: 5px 0;">Body Frame: <span id="bodyCoordsText" class="coordinate-text">(2.00, 2.00, 2.00)</span></p>
+                <p style="margin: 5px 0;">Ground Frame: <span id="groundCoords" class="coordinate-text" style="color: #d93025;">(2.00, 2.00, 2.00)</span></p>
             </div>
 
         </div>
@@ -178,50 +214,37 @@
         const container = document.getElementById('canvasContainer');
         const scene = new THREE.Scene();
         
-        // Add a grid for spatial reference
         const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
         scene.add(gridHelper);
 
-        // Setup Camera
         const camera = new THREE.PerspectiveCamera(50, 500 / 500, 0.1, 1000);
-        camera.position.set(4, 4, 6); // Position camera diagonally above
+        camera.position.set(4, 4, 6);
 
-        // Setup Renderer
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(500, 500);
         container.appendChild(renderer.domElement);
 
-        // Setup OrbitControls (Mouse interaction)
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
         // --- 2. CREATE COORDINATE FRAMES ---
-        
-        // Global Frame (Fixed, semi-transparent)
         const globalAxes = new THREE.AxesHelper(4);
         globalAxes.material.transparent = true;
         globalAxes.material.opacity = 0.3;
         scene.add(globalAxes);
 
-        // Body Frame (Rotating)
         const bodyAxes = new THREE.AxesHelper(3);
-        // Make the body axes thicker for visibility
         bodyAxes.material.linewidth = 3; 
         scene.add(bodyAxes);
-        // Create Point P as a small sphere
+
         const pointGeo = new THREE.SphereGeometry(0.15, 16, 16);
-        const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red point
+        const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
         const pointP = new THREE.Mesh(pointGeo, pointMat);
         
-        // Set its position in the body frame
         pointP.position.set(2, 2, 2);
-        
-        // **CRITICAL:** Add the point TO the body axes, not the scene. 
-        // This makes it rotate with the body frame automatically.
         bodyAxes.add(pointP);
 
         // --- 3. UI AND MATH LOGIC ---
-        
         const xSlider = document.getElementById('xSlider');
         const ySlider = document.getElementById('ySlider');
         const zSlider = document.getElementById('zSlider');
@@ -231,63 +254,84 @@
         const zVal = document.getElementById('zVal');
         
         const matrixDisplay = document.getElementById('matrixDisplay');
+        const groundCoordsDisplay = document.getElementById('groundCoords');
+        const bodyCoordsText = document.getElementById('bodyCoordsText');
+
+        // NEW: Grab the number inputs
+        const pXInput = document.getElementById('pX');
+        const pYInput = document.getElementById('pY');
+        const pZInput = document.getElementById('pZ');
+
+        // NEW: Function to handle point changes
+        function updatePointPosition() {
+            // Read values from inputs (default to 0 if empty)
+            const pX = parseFloat(pXInput.value) || 0;
+            const pY = parseFloat(pYInput.value) || 0;
+            const pZ = parseFloat(pZInput.value) || 0;
+
+            // Update the physical point in the 3D scene
+            pointP.position.set(pX, pY, pZ);
+
+            // Update the UI text for the body frame
+            bodyCoordsText.innerText = `(${pX.toFixed(2)}, ${pY.toFixed(2)}, ${pZ.toFixed(2)})`;
+
+            // Force a recalculation of the rotation to update Ground coordinates
+            updateRotation();
+        }
 
         function updateRotation() {
-            // Get values from sliders
             const degX = parseFloat(xSlider.value);
             const degY = parseFloat(ySlider.value);
             const degZ = parseFloat(zSlider.value);
 
-            // Update text displays
             xVal.innerHTML = `${degX}&deg;`;
             yVal.innerHTML = `${degY}&deg;`;
             zVal.innerHTML = `${degZ}&deg;`;
 
-            // Convert degrees to radians for math
             const radX = THREE.MathUtils.degToRad(degX);
             const radY = THREE.MathUtils.degToRad(degY);
             const radZ = THREE.MathUtils.degToRad(degZ);
 
-            // Apply rotations to the body frame (Order: XYZ)
             bodyAxes.rotation.set(radX, radY, radZ, 'XYZ');
-
-            // Force Three.js to update the matrix calculations immediately
             bodyAxes.updateMatrixWorld();
 
-            // Extract the 4x4 matrix from Three.js and format as 3x3
-            // Three.js stores matrices as 1D arrays in column-major order
             const e = bodyAxes.matrixWorld.elements;
             
-            // Format the output string
             const mText = `[ ${e[0].toFixed(2).padStart(5)}, ${e[4].toFixed(2).padStart(5)}, ${e[8].toFixed(2).padStart(5)} ]\n` +
                           `[ ${e[1].toFixed(2).padStart(5)}, ${e[5].toFixed(2).padStart(5)}, ${e[9].toFixed(2).padStart(5)} ]\n` +
                           `[ ${e[2].toFixed(2).padStart(5)}, ${e[6].toFixed(2).padStart(5)}, ${e[10].toFixed(2).padStart(5)} ]`;
             
             matrixDisplay.innerText = mText;
-            // Create a vector to hold the global coordinates
+
+            // Calculate global coordinates of the point
             const globalPos = new THREE.Vector3();
-            
-            // Ask Three.js to calculate where pointP is in the global world
             pointP.getWorldPosition(globalPos);
             
-            // Update the HTML text
-            document.getElementById('groundCoords').innerText = 
-                `(${globalPos.x.toFixed(2)}, ${globalPos.y.toFixed(2)}, ${globalPos.z.toFixed(2)})`;
+            // Format to avoid floating point anomalies (like -0.00)
+            const gX = globalPos.x === 0 ? 0 : globalPos.x;
+            const gY = globalPos.y === 0 ? 0 : globalPos.y;
+            const gZ = globalPos.z === 0 ? 0 : globalPos.z;
+
+            groundCoordsDisplay.innerText = `(${gX.toFixed(2)}, ${gY.toFixed(2)}, ${gZ.toFixed(2)})`;
         }
 
-        // Add event listeners to sliders
+        // Event listeners for Sliders
         xSlider.addEventListener('input', updateRotation);
         ySlider.addEventListener('input', updateRotation);
         zSlider.addEventListener('input', updateRotation);
 
+        // NEW: Event listeners for Point Inputs
+        pXInput.addEventListener('input', updatePointPosition);
+        pYInput.addEventListener('input', updatePointPosition);
+        pZInput.addEventListener('input', updatePointPosition);
+
         // --- 4. ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            controls.update(); // Required for OrbitControls damping
+            controls.update(); 
             renderer.render(scene, camera);
         }
 
-        // Initialize and start loop
         updateRotation();
         animate();
     </script>
