@@ -1,339 +1,1443 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Rotation Matrix Visualizer</title>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>3D Rotation &amp; Euler Angle Laboratory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+/* ============================================================
+   DESIGN TOKENS — "Avionics HUD" engineering aesthetic
+   Deep graphite/navy surfaces, amber + cyan instrument accents.
+   X/Y/Z red/green/blue is reserved strictly for axis identity.
+   ============================================================ */
+:root{
+  --bg:            #0a0d12;
+  --bg-grad:       #0d1219;
+  --panel:         #12161f;
+  --panel-2:       #171c26;
+  --panel-border:  #232a37;
+  --line:          #232a37;
+  --text:          #e7ecf3;
+  --text-dim:      #8b94a7;
+  --text-faint:    #5b6373;
+  --amber:         #ffb020;
+  --cyan:          #23d5e0;
+  --axis-x:        #ff5c5c;
+  --axis-y:        #4ee08a;
+  --axis-z:        #4d9dff;
+  --danger:        #ff5c5c;
+  --mono: 'JetBrains Mono', 'IBM Plex Mono', 'Courier New', monospace;
+  --sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --radius: 10px;
+  --shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+@font-face{ font-family:'Inter'; src:local('Inter'); }
+*{box-sizing:border-box;}
+html,body{
+  margin:0; padding:0;
+  background: radial-gradient(1200px 800px at 15% -10%, #101722 0%, var(--bg) 55%) fixed;
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection{ background: var(--amber); color:#111; }
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-thumb{ background:#2a3140; border-radius:6px; }
+::-webkit-scrollbar-track{ background: transparent; }
 
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f4f4f9;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-        }
+a{ color: var(--cyan); }
 
-        h1 {
-            margin-bottom: 20px;
-            text-align: center;
-        }
+/* ---------- Top bar ---------- */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  position: sticky; top:0; z-index: 50;
+  backdrop-filter: blur(6px);
+}
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:34px; height:34px; border-radius:8px;
+  background: conic-gradient(from 220deg, var(--axis-x), var(--axis-y), var(--axis-z), var(--axis-x));
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.35), 0 0 18px rgba(35,213,224,0.25);
+  font-family: var(--mono); font-weight:700; font-size:13px; color:#0a0d12;
+}
+.brand-text h1{
+  font-size: 15px; margin:0; letter-spacing:0.06em; text-transform:uppercase; font-weight:700;
+}
+.brand-text p{ margin:1px 0 0; font-size:11.5px; color: var(--text-dim); font-family: var(--mono); }
+.topbar-actions{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 30px;
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-            justify-content: center;
-            max-width: 1000px;
-        }
+.btn{
+  appearance:none; border:1px solid var(--panel-border); background: var(--panel-2); color: var(--text);
+  padding: 8px 12px; border-radius: 8px; font-family: var(--sans); font-size: 12.5px; font-weight:600;
+  cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition: all .15s ease; white-space:nowrap;
+}
+.btn:hover{ border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(35,213,224,0.25); transform: translateY(-1px); }
+.btn:active{ transform: translateY(0); }
+.btn.primary{ background: linear-gradient(180deg,#2ee0ea,#1bb9c4); color:#04191b; border-color: transparent; }
+.btn.primary:hover{ box-shadow: 0 0 0 1px rgba(46,224,234,0.5), 0 6px 18px rgba(35,213,224,0.25); }
+.btn.warn{ background: linear-gradient(180deg,#ffc65c,#ffb020); color:#241400; border-color:transparent; }
+.btn.danger{ background: linear-gradient(180deg,#ff7a7a,#ff5c5c); color:#280707; border-color:transparent; }
+.btn.ghost{ background: transparent; }
+.btn.small{ padding:5px 9px; font-size:11.5px; }
+.btn:disabled{ opacity:0.4; cursor:not-allowed; transform:none; }
 
-        .canvas-container {
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            background-color: #1e1e1e;
-            overflow: hidden;
-            width: 500px;
-            height: 500px;
-        }
+/* ---------- Layout ---------- */
+.layout{
+  display:grid;
+  grid-template-columns: minmax(0,1.55fr) minmax(320px, 0.95fr);
+  gap: 16px;
+  padding: 16px;
+  max-width: 1720px;
+  margin: 0 auto;
+  align-items:start;
+}
+@media (max-width: 1080px){
+  .layout{ grid-template-columns: 1fr; }
+}
 
-        .controls {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            width: 350px;
-        }
+.stage-col{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+.side-col{ display:flex; flex-direction:column; gap:14px; min-width:0; }
 
-        .slider-group, .data-section {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 15px;
-            background: #eef2f5;
-            border-radius: 8px;
-            border: 1px solid #eee;
-        }
+/* ---------- 3D stage ---------- */
+.stage{
+  position:relative;
+  background: linear-gradient(180deg, #0c0f16, #0a0c12);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.stage-hud-corner{
+  position:absolute; width:22px; height:22px; border-color: rgba(35,213,224,0.55); pointer-events:none; z-index:5;
+}
+.stage-hud-corner.tl{ top:10px; left:10px; border-top:2px solid; border-left:2px solid; border-radius: 4px 0 0 0;}
+.stage-hud-corner.tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; border-radius: 0 4px 0 0;}
+.stage-hud-corner.bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; border-radius: 0 0 0 4px;}
+.stage-hud-corner.br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; border-radius: 0 0 4px 0;}
 
-        .slider-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
+#canvasContainer{ width:100%; height: 100%; display:block; touch-action:none; }
+.stage-inner{ position:relative; width:100%; height: min(64vh, 640px); min-height: 380px; }
 
-        .slider-row input[type="range"] {
-            flex-grow: 1;
-            margin: 0 10px;
-        }
+.stage-overlay-top{
+  position:absolute; top:12px; left:50%; transform:translateX(-50%);
+  display:flex; gap:8px; z-index:6; pointer-events:none;
+}
+.pill{
+  font-family: var(--mono); font-size:11px; letter-spacing:0.04em;
+  background: rgba(10,13,18,0.72); border:1px solid var(--panel-border);
+  padding: 5px 10px; border-radius:20px; color: var(--text-dim); pointer-events:auto;
+  backdrop-filter: blur(4px);
+}
+.pill.active{ color: var(--amber); border-color: rgba(255,176,32,0.5); }
 
-        label {
-            font-weight: bold;
-            min-width: 100px;
-        }
+.cam-controls{
+  position:absolute; bottom:12px; left:12px; display:flex; gap:6px; flex-wrap:wrap; max-width: 60%; z-index:6;
+}
+.cam-controls .btn{ background: rgba(18,22,31,0.78); backdrop-filter: blur(4px); }
 
-        .val-display {
-            min-width: 45px;
-            text-align: right;
-            font-family: monospace;
-            font-size: 1.1rem;
-        }
+.explain-banner{
+  position:absolute; bottom:12px; right:12px; max-width: 46%;
+  background: rgba(10,13,18,0.82); border:1px solid var(--panel-border); border-left: 3px solid var(--cyan);
+  border-radius: 8px; padding: 10px 12px; z-index:6; backdrop-filter: blur(4px);
+}
+.explain-banner .eyebrow{ font-family: var(--mono); font-size:10px; letter-spacing:0.1em; color: var(--cyan); text-transform:uppercase; }
+.explain-banner p{ margin:4px 0 0; font-size:12.5px; color: var(--text); line-height:1.4; }
 
-        h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
-            color: #444;
-        }
+/* ---------- Cards ---------- */
+.card{
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+.card-head h2{
+  margin:0; font-size:11.5px; letter-spacing:0.1em; text-transform:uppercase; color: var(--text-dim); font-weight:700;
+}
+.card-head .tag{ font-family: var(--mono); font-size:10.5px; color: var(--text-faint); }
+.collapsible .card-head{ cursor:pointer; user-select:none; }
+.collapsible .chev{ transition: transform .2s ease; color: var(--text-dim); font-size:11px; }
+.collapsible.collapsed .chev{ transform: rotate(-90deg); }
+.collapsible .card-body{ overflow:hidden; }
+.collapsible.collapsed .card-body{ display:none; }
 
-        .matrix-display {
-            font-family: 'Courier New', Courier, monospace;
-            background: #282c34;
-            color: #61afef;
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 1.3rem;
-            line-height: 1.8;
-            letter-spacing: 2px;
-            white-space: pre;
-        }
+/* ---------- Sliders ---------- */
+.axis-row{ margin-bottom: 14px; }
+.axis-row:last-child{ margin-bottom:0; }
+.axis-row .row-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.axis-name{ display:flex; align-items:center; gap:7px; font-weight:700; font-size:12.5px; letter-spacing:0.03em; }
+.dot{ width:9px; height:9px; border-radius:50%; display:inline-block; box-shadow: 0 0 8px currentColor; }
+.dot.x{ background: var(--axis-x); color: var(--axis-x); }
+.dot.y{ background: var(--axis-y); color: var(--axis-y); }
+.dot.z{ background: var(--axis-z); color: var(--axis-z); }
+.axis-name .sub{ color: var(--text-faint); font-weight:500; font-family: var(--mono); font-size:11px; }
 
-        /* New CSS for the Point Inputs */
-        .point-inputs {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-        
-        .point-inputs label {
-            min-width: auto;
-            font-size: 0.9rem;
-        }
-        
-        .point-inputs input {
-            width: 50px;
-            padding: 4px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            text-align: center;
-        }
+.slider-controls{ display:flex; align-items:center; gap:8px; }
+input[type=range]{
+  -webkit-appearance:none; appearance:none; flex:1; height:5px; border-radius:4px; background: #232a37; outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+  background: var(--track-color, var(--cyan)); cursor:pointer; border:2px solid #0a0d12;
+  box-shadow: 0 0 0 2px var(--track-color, var(--cyan)), 0 0 10px var(--track-color, var(--cyan));
+}
+input[type=range]::-moz-range-thumb{
+  width:16px; height:16px; border-radius:50%; background: var(--track-color, var(--cyan)); cursor:pointer; border:2px solid #0a0d12;
+}
+#rollSlider{ --track-color: var(--axis-x); }
+#pitchSlider{ --track-color: var(--axis-y); }
+#yawSlider{ --track-color: var(--axis-z); }
 
-        .coordinate-text {
-            font-family: monospace;
-            font-weight: bold;
-            color: #0056b3;
-        }
+.mini-btn{
+  width:24px; height:24px; border-radius:6px; border:1px solid var(--panel-border); background: var(--panel-2);
+  color:var(--text); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+}
+.mini-btn:hover{ border-color: var(--cyan); }
+.num-input{
+  width:64px; text-align:center; font-family: var(--mono); font-size:13px; background: var(--panel-2);
+  border:1px solid var(--panel-border); border-radius:6px; color:var(--text); padding:4px 2px;
+}
+.num-input:focus{ outline:none; border-color: var(--cyan); }
+.range-caps{ display:flex; justify-content:space-between; font-family: var(--mono); font-size:9.5px; color: var(--text-faint); margin-top:2px; }
 
-        .legend {
-            display: flex;
-            gap: 15px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            justify-content: center;
-            margin-top: 10px;
-        }
-        .legend span { padding: 4px 8px; border-radius: 4px; }
-        .x-axis { background: #ffcccc; color: #cc0000; }
-        .y-axis { background: #ccffcc; color: #008800; }
-        .z-axis { background: #ccccff; color: #0000cc; }
-    </style>
+/* ---------- Matrix ---------- */
+.matrix-wrap{ display:flex; align-items:center; gap:6px; justify-content:center; }
+.matrix-bracket{ font-size: 46px; color: var(--text-faint); font-weight:200; line-height:1; }
+.matrix-grid{
+  display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px;
+  font-family: var(--mono); font-size: 14px; padding: 6px 4px;
+}
+.matrix-grid .cell{
+  text-align:right; min-width: 64px; padding: 4px 2px; border-radius:4px; transition: background .3s ease, color .3s ease;
+  color: var(--cyan);
+}
+.matrix-grid .cell.flash{ background: rgba(255,176,32,0.18); color: var(--amber); }
+.decimals-toggle{ display:flex; gap:4px; justify-content:center; margin-top:10px; }
+.decimals-toggle button.active{ border-color: var(--amber); color: var(--amber); }
+
+.formula{ font-family: var(--mono); font-size:12.5px; color: var(--text-dim); text-align:center; margin: 4px 0 10px; }
+.formula b{ color: var(--text); }
+
+.elemental-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom: 10px;}
+.elemental{ text-align:center; }
+.elemental .label{ font-family: var(--mono); font-size:11px; margin-bottom:4px; }
+.elemental .matrix-grid{ font-size:11.5px; gap:3px 7px; }
+.elemental .matrix-grid .cell{ min-width:44px; color: var(--text-dim); }
+.elemental .matrix-bracket{ font-size:34px; }
+
+.props-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-family: var(--mono); font-size:12px; }
+.props-grid .prop{ background: var(--panel-2); border:1px solid var(--panel-border); border-radius:8px; padding:8px 10px; }
+.props-grid .prop .k{ color: var(--text-faint); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; }
+.props-grid .prop .v{ margin-top:2px; font-size:14px; }
+.ok{ color: var(--axis-y); }
+.bad{ color: var(--axis-x); }
+
+/* ---------- Point P ---------- */
+.point-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.point-field label{ font-family: var(--mono); font-size:10.5px; color: var(--text-faint); display:block; margin-bottom:3px; }
+.point-field input{ width:100%; }
+.coord-line{ display:flex; justify-content:space-between; align-items:center; font-family: var(--mono); font-size:12.5px; padding:7px 10px; background: var(--panel-2); border-radius:7px; border:1px solid var(--panel-border); margin-bottom:6px;}
+.coord-line .k{ color: var(--text-dim); }
+.coord-line .v{ color: var(--text); }
+.coord-line.world .v{ color: var(--amber); }
+
+/* ---------- Live orientation ---------- */
+.stat-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:10px; }
+.stat{ background: var(--panel-2); border:1px solid var(--panel-border); border-radius:8px; padding:8px 10px; text-align:center; }
+.stat .k{ font-family: var(--mono); font-size:10px; color: var(--text-faint); }
+.stat .v{ font-family: var(--mono); font-size:15px; margin-top:3px; font-weight:700; }
+.quat-grid{ display:grid; grid-template-columns: repeat(4,1fr); gap:6px; font-family: var(--mono); font-size:11.5px; }
+.quat-grid div{ background: var(--panel-2); border:1px solid var(--panel-border); border-radius:6px; padding:6px; text-align:center; }
+
+/* ---------- Toggles ---------- */
+.toggle-list{ display:flex; flex-direction:column; gap:8px; }
+.toggle-row{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; }
+.switch{ position:relative; width:36px; height:20px; flex:none; }
+.switch input{ opacity:0; width:0; height:0; }
+.switch .track{ position:absolute; inset:0; background:#2a3140; border-radius:20px; cursor:pointer; transition:.2s; }
+.switch .track:before{ content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#c9d1e0; border-radius:50%; transition:.2s; }
+.switch input:checked + .track{ background: var(--cyan); }
+.switch input:checked + .track:before{ transform: translateX(16px); background:#04191b; }
+
+/* ---------- Animation / step panel ---------- */
+.mode-toggle{ display:flex; gap:0; background: var(--panel-2); border:1px solid var(--panel-border); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+.mode-toggle button{ flex:1; padding:8px; background:transparent; border:none; color: var(--text-dim); font-size:12px; font-weight:700; cursor:pointer; }
+.mode-toggle button.active{ background: var(--cyan); color:#04191b; }
+
+.anim-controls{ display:flex; gap:8px; justify-content:center; margin-bottom:12px; flex-wrap:wrap; }
+.speed-row{ display:flex; align-items:center; gap:10px; font-family: var(--mono); font-size:11px; color: var(--text-dim); }
+.speed-row input{ flex:1; }
+
+.step-view{ display:none; }
+.step-view.active{ display:block; }
+.step-indicator{ display:flex; gap:6px; justify-content:center; margin-bottom:10px; }
+.step-dot{ width:26px; height:6px; border-radius:4px; background:#2a3140; }
+.step-dot.done{ background: var(--cyan); }
+.step-dot.current{ background: var(--amber); }
+.step-caption{ text-align:center; font-family: var(--mono); font-size:12px; color: var(--text-dim); margin-bottom:10px; min-height: 34px; }
+.step-caption b{ color: var(--text); }
+.step-nav{ display:flex; gap:8px; justify-content:center; }
+
+/* ---------- Presets ---------- */
+.preset-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; }
+.preset-grid .btn{ justify-content:center; }
+.preset-grid .btn.wide{ grid-column: 1 / -1; }
+
+/* ---------- Keyboard help ---------- */
+.kbd-help{
+  position: fixed; inset:0; background: rgba(5,7,10,0.72); backdrop-filter: blur(3px); z-index: 100;
+  display:none; align-items:center; justify-content:center;
+}
+.kbd-help.open{ display:flex; }
+.kbd-help .box{
+  background: var(--panel); border:1px solid var(--panel-border); border-radius:12px; padding:22px 26px; max-width: 420px; box-shadow: var(--shadow);
+}
+.kbd-help h3{ margin:0 0 12px; font-size:14px; letter-spacing:0.05em; text-transform:uppercase; }
+.kbd-help table{ width:100%; border-collapse:collapse; font-size:13px; }
+.kbd-help td{ padding:6px 4px; border-bottom:1px solid var(--panel-border); }
+.kbd-help td:first-child{ font-family: var(--mono); color: var(--amber); }
+kbd{ background:#232a37; border-radius:4px; padding:1px 6px; font-family: var(--mono); font-size:11.5px; border:1px solid #333c4d; }
+
+.footer-note{ text-align:center; color: var(--text-faint); font-size:11px; padding: 6px 10px 26px; font-family: var(--mono); }
+
+@media (max-width: 640px){
+  .stage-inner{ height: 52vh; min-height: 320px; }
+  .explain-banner{ display:none; }
+  .point-grid{ grid-template-columns: 1fr 1fr 1fr; }
+  .preset-grid{ grid-template-columns: 1fr 1fr; }
+}
+</style>
 </head>
 <body>
 
-    <h1>3D Rigid Body Rotation Visualizer</h1>
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">R</div>
+    <div class="brand-text">
+      <h1>3D Rotation Laboratory</h1>
+      <p id="conventionLabel">Convention: R = Rx(Roll)&middot;Ry(Pitch)&middot;Rz(Yaw)</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" id="demoBtn">▶ Demo Mode</button>
+    <button class="btn ghost" id="kbdBtn">⌨ Shortcuts</button>
+    <button class="btn danger" id="resetBtn">↻ Reset</button>
+  </div>
+</div>
 
-    <div class="container">
-        <div class="canvas-container" id="canvasContainer"></div>
-        
-        <div class="controls">
-            
-            <div class="slider-group">
-                <h3>Euler Angles (Degrees)</h3>
-                
-                <div class="slider-row">
-                    <label style="color: #ff3333;">Roll (X):</label>
-                    <input type="range" id="xSlider" min="-180" max="180" value="0">
-                    <span class="val-display" id="xVal">0&deg;</span>
-                </div>
-                
-                <div class="slider-row">
-                    <label style="color: #33cc33;">Pitch (Y):</label>
-                    <input type="range" id="ySlider" min="-180" max="180" value="0">
-                    <span class="val-display" id="yVal">0&deg;</span>
-                </div>
-                
-                <div class="slider-row">
-                    <label style="color: #3366ff;">Yaw (Z):</label>
-                    <input type="range" id="zSlider" min="-180" max="180" value="0">
-                    <span class="val-display" id="zVal">0&deg;</span>
-                </div>
+<div class="layout">
 
-                <div class="legend">
-                    <span class="x-axis">X Axis (Red)</span>
-                    <span class="y-axis">Y Axis (Green)</span>
-                    <span class="z-axis">Z Axis (Blue)</span>
-                </div>
-                <p style="font-size: 0.8rem; text-align: center; margin-bottom: 0; margin-top: 10px;"><em>Tip: Click and drag the 3D canvas to rotate the camera.</em></p>
-            </div>
-            
-            <div class="data-section" style="background: white;">
-                <h3>3x3 Rotation Matrix</h3>
-                <div class="matrix-display" id="matrixDisplay">
-[ 1.00,  0.00,  0.00 ]
-[ 0.00,  1.00,  0.00 ]
-[ 0.00,  0.00,  1.00 ]
-                </div>
-            </div>
+  <!-- ================= STAGE (3D VIEW) ================= -->
+  <div class="stage-col">
+    <div class="stage">
+      <div class="stage-inner">
+        <div id="canvasContainer"></div>
+        <div class="stage-hud-corner tl"></div>
+        <div class="stage-hud-corner tr"></div>
+        <div class="stage-hud-corner bl"></div>
+        <div class="stage-hud-corner br"></div>
 
-            <div class="data-section">
-                <h3>Point P Customization</h3>
-                
-                <div class="point-inputs">
-                    <label>X: <input type="number" id="pX" value="2" step="0.5"></label>
-                    <label>Y: <input type="number" id="pY" value="2" step="0.5"></label>
-                    <label>Z: <input type="number" id="pZ" value="2" step="0.5"></label>
-                </div>
-                
-                <p style="margin: 5px 0;">Body Frame: <span id="bodyCoordsText" class="coordinate-text">(2.00, 2.00, 2.00)</span></p>
-                <p style="margin: 5px 0;">Ground Frame: <span id="groundCoords" class="coordinate-text" style="color: #d93025;">(2.00, 2.00, 2.00)</span></p>
-            </div>
-
+        <div class="stage-overlay-top">
+          <span class="pill" id="axisPill">Rotation axis: —</span>
+          <span class="pill" id="modePill">Full Rotation</span>
         </div>
+
+        <div class="cam-controls">
+          <button class="btn small" data-view="iso">Iso</button>
+          <button class="btn small" data-view="top">Top</button>
+          <button class="btn small" data-view="front">Front</button>
+          <button class="btn small" data-view="side">Side</button>
+          <button class="btn small" id="resetCamBtn">Reset Cam</button>
+          <label class="btn small" style="cursor:pointer;">
+            <input type="checkbox" id="followBody" style="margin-right:5px;">Follow Body
+          </label>
+        </div>
+
+        <div class="explain-banner">
+          <div class="eyebrow">What is happening?</div>
+          <p id="explainText">Adjust Roll, Pitch, or Yaw to rotate the body frame relative to the fixed world frame.</p>
+        </div>
+      </div>
     </div>
 
-    <script>
-        // --- 1. SETUP THREE.JS SCENE ---
-        const container = document.getElementById('canvasContainer');
-        const scene = new THREE.Scene();
-        
-        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
-        scene.add(gridHelper);
+    <!-- Euler angle sliders -->
+    <div class="card">
+      <div class="card-head"><h2>Euler Angles</h2><span class="tag">Roll · Pitch · Yaw</span></div>
+      <div class="axis-row">
+        <div class="row-top">
+          <span class="axis-name"><span class="dot x"></span>ROLL <span class="sub">(about X)</span></span>
+        </div>
+        <div class="slider-controls">
+          <button class="mini-btn" data-adj="roll" data-dir="-1">−</button>
+          <input type="range" id="rollSlider" min="-180" max="180" step="1" value="0">
+          <button class="mini-btn" data-adj="roll" data-dir="1">+</button>
+          <input class="num-input" id="rollNum" type="number" min="-180" max="180" value="0">
+        </div>
+        <div class="range-caps"><span>-180°</span><span>+180°</span></div>
+      </div>
+      <div class="axis-row">
+        <div class="row-top">
+          <span class="axis-name"><span class="dot y"></span>PITCH <span class="sub">(about Y)</span></span>
+        </div>
+        <div class="slider-controls">
+          <button class="mini-btn" data-adj="pitch" data-dir="-1">−</button>
+          <input type="range" id="pitchSlider" min="-90" max="90" step="1" value="0">
+          <button class="mini-btn" data-adj="pitch" data-dir="1">+</button>
+          <input class="num-input" id="pitchNum" type="number" min="-90" max="90" value="0">
+        </div>
+        <div class="range-caps"><span>-90°</span><span>+90°</span></div>
+      </div>
+      <div class="axis-row">
+        <div class="row-top">
+          <span class="axis-name"><span class="dot z"></span>YAW <span class="sub">(about Z)</span></span>
+        </div>
+        <div class="slider-controls">
+          <button class="mini-btn" data-adj="yaw" data-dir="-1">−</button>
+          <input type="range" id="yawSlider" min="-180" max="180" step="1" value="0">
+          <button class="mini-btn" data-adj="yaw" data-dir="1">+</button>
+          <input class="num-input" id="yawNum" type="number" min="-180" max="180" value="0">
+        </div>
+        <div class="range-caps"><span>-180°</span><span>+180°</span></div>
+      </div>
+    </div>
 
-        const camera = new THREE.PerspectiveCamera(50, 500 / 500, 0.1, 1000);
-        camera.position.set(4, 4, 6);
+    <!-- Animation + Step-by-step -->
+    <div class="card">
+      <div class="card-head"><h2>Rotation Animation</h2>
+        <div class="mode-toggle" style="width:220px; margin:0;">
+          <button id="modeFullBtn" class="active">Full Rotation</button>
+          <button id="modeStepBtn">Step-by-Step</button>
+        </div>
+      </div>
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(500, 500);
-        container.appendChild(renderer.domElement);
+      <div id="fullView">
+        <div class="anim-controls">
+          <button class="btn primary" id="playBtn">▶ Play</button>
+          <button class="btn" id="pauseBtn">⏸ Pause</button>
+          <button class="btn" id="stepFrameBtn">⏮ Step</button>
+          <button class="btn ghost" id="animResetBtn">↻ Reset Orientation</button>
+        </div>
+        <div class="speed-row">
+          <span>Slow</span>
+          <input type="range" id="speedSlider" min="1" max="10" value="4">
+          <span>Fast</span>
+        </div>
+      </div>
 
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
+      <div id="stepView" class="step-view">
+        <div class="step-indicator">
+          <div class="step-dot" id="dot0"></div>
+          <div class="step-dot" id="dot1"></div>
+          <div class="step-dot" id="dot2"></div>
+        </div>
+        <div class="step-caption" id="stepCaption">Step 1 — <b>Roll</b>: rotation about the X-axis.</div>
+        <div class="step-nav">
+          <button class="btn" id="prevStepBtn">← Previous</button>
+          <button class="btn primary" id="nextStepBtn">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // --- 2. CREATE COORDINATE FRAMES ---
-        const globalAxes = new THREE.AxesHelper(4);
-        globalAxes.material.transparent = true;
-        globalAxes.material.opacity = 0.3;
-        scene.add(globalAxes);
+  <!-- ================= SIDE PANELS ================= -->
+  <div class="side-col">
 
-        const bodyAxes = new THREE.AxesHelper(3);
-        bodyAxes.material.linewidth = 3; 
-        scene.add(bodyAxes);
+    <!-- Rotation matrix -->
+    <div class="card">
+      <div class="card-head"><h2>Rotation Matrix R</h2><span class="tag">P_world = R · P_body</span></div>
+      <div class="matrix-wrap">
+        <div class="matrix-bracket">[</div>
+        <div class="matrix-grid" id="matrixGrid"></div>
+        <div class="matrix-bracket">]</div>
+      </div>
+      <div class="decimals-toggle">
+        <button class="btn small" data-dec="2">2 dec</button>
+        <button class="btn small active" data-dec="3">3 dec</button>
+        <button class="btn small" data-dec="4">4 dec</button>
+      </div>
+    </div>
 
-        const pointGeo = new THREE.SphereGeometry(0.15, 16, 16);
-        const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        const pointP = new THREE.Mesh(pointGeo, pointMat);
-        
-        pointP.position.set(2, 2, 2);
-        bodyAxes.add(pointP);
+    <!-- Matrix derivation -->
+    <div class="card collapsible collapsed" id="derivCard">
+      <div class="card-head"><h2>Matrix Derivation</h2><span class="chev">▾</span></div>
+      <div class="card-body">
+        <div class="formula">R = <b>Rx(Roll)</b> · <b>Ry(Pitch)</b> · <b>Rz(Yaw)</b></div>
+        <div class="elemental-row">
+          <div class="elemental">
+            <div class="label" style="color:var(--axis-x);">Rx(Roll)</div>
+            <div class="matrix-wrap"><div class="matrix-bracket">[</div><div class="matrix-grid" id="rxGrid"></div><div class="matrix-bracket">]</div></div>
+          </div>
+          <div class="elemental">
+            <div class="label" style="color:var(--axis-y);">Ry(Pitch)</div>
+            <div class="matrix-wrap"><div class="matrix-bracket">[</div><div class="matrix-grid" id="ryGrid"></div><div class="matrix-bracket">]</div></div>
+          </div>
+          <div class="elemental">
+            <div class="label" style="color:var(--axis-z);">Rz(Yaw)</div>
+            <div class="matrix-wrap"><div class="matrix-bracket">[</div><div class="matrix-grid" id="rzGrid"></div><div class="matrix-bracket">]</div></div>
+          </div>
+        </div>
+        <p style="font-size:11.5px; color:var(--text-faint); text-align:center; margin:8px 0 0;">
+          Elemental matrices multiply in this fixed order — changing any angle only changes its own factor, then the product R is recomputed.
+        </p>
+      </div>
+    </div>
 
-        // --- 3. UI AND MATH LOGIC ---
-        const xSlider = document.getElementById('xSlider');
-        const ySlider = document.getElementById('ySlider');
-        const zSlider = document.getElementById('zSlider');
-        
-        const xVal = document.getElementById('xVal');
-        const yVal = document.getElementById('yVal');
-        const zVal = document.getElementById('zVal');
-        
-        const matrixDisplay = document.getElementById('matrixDisplay');
-        const groundCoordsDisplay = document.getElementById('groundCoords');
-        const bodyCoordsText = document.getElementById('bodyCoordsText');
+    <!-- Matrix properties -->
+    <div class="card collapsible collapsed" id="propsCard">
+      <div class="card-head"><h2>Matrix Properties</h2><span class="chev">▾</span></div>
+      <div class="card-body">
+        <div class="props-grid">
+          <div class="prop"><div class="k">det(R)</div><div class="v" id="detVal">1.000</div></div>
+          <div class="prop"><div class="k">Orthogonal (RᵀR = I)</div><div class="v" id="orthoVal">✓</div></div>
+        </div>
+      </div>
+    </div>
 
-        // NEW: Grab the number inputs
-        const pXInput = document.getElementById('pX');
-        const pYInput = document.getElementById('pY');
-        const pZInput = document.getElementById('pZ');
+    <!-- Point P -->
+    <div class="card">
+      <div class="card-head"><h2>Point Transformation</h2><span class="tag">Body → World</span></div>
+      <div class="point-grid">
+        <div class="point-field"><label>X</label><input class="num-input" style="width:100%;" type="number" id="pX" value="3" step="0.5"></div>
+        <div class="point-field"><label>Y</label><input class="num-input" style="width:100%;" type="number" id="pY" value="2" step="0.5"></div>
+        <div class="point-field"><label>Z</label><input class="num-input" style="width:100%;" type="number" id="pZ" value="2" step="0.5"></div>
+      </div>
+      <div class="coord-line"><span class="k">P_body</span><span class="v" id="bodyCoordsText">(3.000, 2.000, 2.000)</span></div>
+      <div class="coord-line world"><span class="k">P_world = R·P_body</span><span class="v" id="groundCoords">(3.000, 2.000, 2.000)</span></div>
+    </div>
 
-        // NEW: Function to handle point changes
-        function updatePointPosition() {
-            // Read values from inputs (default to 0 if empty)
-            const pX = parseFloat(pXInput.value) || 0;
-            const pY = parseFloat(pYInput.value) || 0;
-            const pZ = parseFloat(pZInput.value) || 0;
+    <!-- Live orientation -->
+    <div class="card">
+      <div class="card-head"><h2>Live Orientation</h2><span class="tag">Axis-Angle</span></div>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">ROLL</div><div class="v" id="liveRoll" style="color:var(--axis-x)">0.0°</div></div>
+        <div class="stat"><div class="k">PITCH</div><div class="v" id="livePitch" style="color:var(--axis-y)">0.0°</div></div>
+        <div class="stat"><div class="k">YAW</div><div class="v" id="liveYaw" style="color:var(--axis-z)">0.0°</div></div>
+      </div>
+      <div class="coord-line"><span class="k">Rotation axis u</span><span class="v" id="axisVal">(0.000, 0.000, 0.000)</span></div>
+      <div class="coord-line"><span class="k">Rotation angle θ</span><span class="v" id="angleVal">0.000°</span></div>
+    </div>
 
-            // Update the physical point in the 3D scene
-            pointP.position.set(pX, pY, pZ);
+    <!-- Quaternion (collapsible) -->
+    <div class="card collapsible collapsed" id="quatCard">
+      <div class="card-head"><h2>Quaternion</h2><span class="chev">▾</span></div>
+      <div class="card-body">
+        <div class="quat-grid">
+          <div><div style="color:var(--text-faint);font-size:10px;">qx</div><div id="qx">0.000</div></div>
+          <div><div style="color:var(--text-faint);font-size:10px;">qy</div><div id="qy">0.000</div></div>
+          <div><div style="color:var(--text-faint);font-size:10px;">qz</div><div id="qz">0.000</div></div>
+          <div><div style="color:var(--text-faint);font-size:10px;">qw</div><div id="qw">1.000</div></div>
+        </div>
+      </div>
+    </div>
 
-            // Update the UI text for the body frame
-            bodyCoordsText.innerText = `(${pX.toFixed(2)}, ${pY.toFixed(2)}, ${pZ.toFixed(2)})`;
+    <!-- Display toggles -->
+    <div class="card collapsible collapsed" id="togglesCard">
+      <div class="card-head"><h2>Display Options</h2><span class="chev">▾</span></div>
+      <div class="card-body toggle-list">
+        <div class="toggle-row">World Frame <label class="switch"><input type="checkbox" id="tglWorld" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Body Frame <label class="switch"><input type="checkbox" id="tglBody" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Basis Vector Labels <label class="switch"><input type="checkbox" id="tglLabels" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Point P <label class="switch"><input type="checkbox" id="tglPoint" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Rotation Arc <label class="switch"><input type="checkbox" id="tglArc" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Grid <label class="switch"><input type="checkbox" id="tglGrid" checked><span class="track"></span></label></div>
+        <div class="toggle-row">Axis-Angle Arrow <label class="switch"><input type="checkbox" id="tglAxisArrow"><span class="track"></span></label></div>
+        <div class="toggle-row">Rotation Trail <label class="switch"><input type="checkbox" id="tglTrail"><span class="track"></span></label></div>
+      </div>
+    </div>
 
-            // Force a recalculation of the rotation to update Ground coordinates
-            updateRotation();
-        }
+    <!-- Presets -->
+    <div class="card">
+      <div class="card-head"><h2>Presets</h2></div>
+      <div class="preset-grid">
+        <button class="btn" data-preset="identity">Identity</button>
+        <button class="btn" data-preset="roll90">Roll 90°</button>
+        <button class="btn" data-preset="pitch90">Pitch 90°</button>
+        <button class="btn" data-preset="yaw90">Yaw 90°</button>
+        <button class="btn" data-preset="roll45">Roll 45°</button>
+        <button class="btn" data-preset="pitch45">Pitch 45°</button>
+        <button class="btn" data-preset="yaw45">Yaw 45°</button>
+        <button class="btn" data-preset="combo">RPY Combo</button>
+        <button class="btn warn wide" data-preset="random">🎲 Random Orientation</button>
+      </div>
+    </div>
 
-        function updateRotation() {
-            const degX = parseFloat(xSlider.value);
-            const degY = parseFloat(ySlider.value);
-            const degZ = parseFloat(zSlider.value);
+  </div>
+</div>
 
-            xVal.innerHTML = `${degX}&deg;`;
-            yVal.innerHTML = `${degY}&deg;`;
-            zVal.innerHTML = `${degZ}&deg;`;
+<div class="footer-note">Interactive 3D Euler Angle &amp; Rotation Matrix Laboratory — built on Three.js r128</div>
 
-            const radX = THREE.MathUtils.degToRad(degX);
-            const radY = THREE.MathUtils.degToRad(degY);
-            const radZ = THREE.MathUtils.degToRad(degZ);
+<!-- Keyboard shortcuts modal -->
+<div class="kbd-help" id="kbdModal">
+  <div class="box">
+    <h3>Keyboard Shortcuts</h3>
+    <table>
+      <tr><td><kbd>X</kbd> / <kbd>Shift+X</kbd></td><td>Increase / decrease Roll</td></tr>
+      <tr><td><kbd>Y</kbd> / <kbd>Shift+Y</kbd></td><td>Increase / decrease Pitch</td></tr>
+      <tr><td><kbd>Z</kbd> / <kbd>Shift+Z</kbd></td><td>Increase / decrease Yaw</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>Play / Pause animation</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Reset orientation</td></tr>
+      <tr><td><kbd>C</kbd></td><td>Reset camera</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close this dialog</td></tr>
+    </table>
+    <div style="text-align:right; margin-top:14px;"><button class="btn primary" id="kbdCloseBtn">Close</button></div>
+  </div>
+</div>
 
-            bodyAxes.rotation.set(radX, radY, radZ, 'XYZ');
-            bodyAxes.updateMatrixWorld();
+<script>
+/* ================================================================
+   3D ROTATION & EULER ANGLE LABORATORY
+   ----------------------------------------------------------------
+   MATH / CONVENTION (preserved from the original implementation):
+   The original code called:
+       bodyAxes.rotation.set(radX, radY, radZ, 'XYZ')
+   Three.js's 'XYZ' Euler order builds the rotation matrix as:
+       R = Rx(roll) * Ry(pitch) * Rz(yaw)
+   applied to a column vector:  P_world = R * P_body
+   This is the classic aerospace "Roll-Pitch-Yaw" (intrinsic X-Y-Z)
+   convention: Roll rotates about the body X axis, Pitch about the
+   (new) Y axis, Yaw about the (new) Z axis, composed in that order.
+   This file preserves that exact convention and matrix ordering —
+   only the visualization, UI, and educational scaffolding around it
+   have been rebuilt.
+   ================================================================ */
 
-            const e = bodyAxes.matrixWorld.elements;
-            
-            const mText = `[ ${e[0].toFixed(2).padStart(5)}, ${e[4].toFixed(2).padStart(5)}, ${e[8].toFixed(2).padStart(5)} ]\n` +
-                          `[ ${e[1].toFixed(2).padStart(5)}, ${e[5].toFixed(2).padStart(5)}, ${e[9].toFixed(2).padStart(5)} ]\n` +
-                          `[ ${e[2].toFixed(2).padStart(5)}, ${e[6].toFixed(2).padStart(5)}, ${e[10].toFixed(2).padStart(5)} ]`;
-            
-            matrixDisplay.innerText = mText;
+(function(){
+'use strict';
 
-            // Calculate global coordinates of the point
-            const globalPos = new THREE.Vector3();
-            pointP.getWorldPosition(globalPos);
-            
-            // Format to avoid floating point anomalies (like -0.00)
-            const gX = globalPos.x === 0 ? 0 : globalPos.x;
-            const gY = globalPos.y === 0 ? 0 : globalPos.y;
-            const gZ = globalPos.z === 0 ? 0 : globalPos.z;
+/* ---------------- Global state (single source of truth) ---------------- */
+const state = {
+  roll: 0, pitch: 0, yaw: 0,
+  point: { x: 3, y: 2, z: 2 },
+  decimals: 3,
+  stepMode: false,
+  currentStep: 0,          // 0=roll only,1=+pitch,2=+yaw
+  animating: false,
+  animPaused: false,
+  speed: 4,
+  followBody: false,
+  showTrail: false,
+  activeAxis: null,        // 'x' | 'y' | 'z' | null  (drives highlight/arc/explain)
+  toggles: {
+    world: true, body: true, labels: true, point: true, arc: true, grid: true, axisArrow: false, trail: false
+  }
+};
 
-            groundCoordsDisplay.innerText = `(${gX.toFixed(2)}, ${gY.toFixed(2)}, ${gZ.toFixed(2)})`;
-        }
+/* ---------------- DOM shortcuts ---------------- */
+const $ = (id) => document.getElementById(id);
+const rollSlider = $('rollSlider'), pitchSlider = $('pitchSlider'), yawSlider = $('yawSlider');
+const rollNum = $('rollNum'), pitchNum = $('pitchNum'), yawNum = $('yawNum');
 
-        // Event listeners for Sliders
-        xSlider.addEventListener('input', updateRotation);
-        ySlider.addEventListener('input', updateRotation);
-        zSlider.addEventListener('input', updateRotation);
+/* ================================================================
+   THREE.JS SCENE SETUP
+   ================================================================ */
+const container = $('canvasContainer');
+const stageInner = document.querySelector('.stage-inner');
+const scene = new THREE.Scene();
 
-        // NEW: Event listeners for Point Inputs
-        pXInput.addEventListener('input', updatePointPosition);
-        pYInput.addEventListener('input', updatePointPosition);
-        pZInput.addEventListener('input', updatePointPosition);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+const DEFAULT_CAM_POS = new THREE.Vector3(6.5, 5, 8);
+camera.position.copy(DEFAULT_CAM_POS);
 
-        // --- 4. ANIMATION LOOP ---
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update(); 
-            renderer.render(scene, camera);
-        }
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
 
-        updateRotation();
-        animate();
-    </script>
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0,0,0);
+
+// Lighting (subtle — mostly for the solid body object)
+scene.add(new THREE.AmbientLight(0x8899aa, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 0.6);
+key.position.set(5, 8, 4);
+scene.add(key);
+
+function resizeRenderer(){
+  const w = stageInner.clientWidth, h = stageInner.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resizeRenderer).observe(stageInner);
+resizeRenderer();
+
+/* ---------------- Grid ---------------- */
+const gridHelper = new THREE.GridHelper(12, 24, 0x2a3140, 0x1a2029);
+gridHelper.position.y = -1.6;
+scene.add(gridHelper);
+
+/* ---------------- Text sprite label helper ---------------- */
+function makeLabel(text, color){
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.font = 'bold 40px monospace';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(text, 64, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent:true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.6, 0.3, 1);
+  return sprite;
+}
+
+/* ---------------- Reusable axis-frame builder ---------------- */
+// Builds a set of 3 colored arrows (+labels) representing a coordinate frame.
+function buildFrame(length, opacity, withLabels, labelPrefix){
+  const group = new THREE.Group();
+  const axes = [
+    { dir: new THREE.Vector3(1,0,0), color: 0xff5c5c, name:'X' },
+    { dir: new THREE.Vector3(0,1,0), color: 0x4ee08a, name:'Y' },
+    { dir: new THREE.Vector3(0,0,1), color: 0x4d9dff, name:'Z' },
+  ];
+  const arrows = {};
+  axes.forEach(a=>{
+    const arrow = new THREE.ArrowHelper(a.dir, new THREE.Vector3(0,0,0), length, a.color, length*0.16, length*0.09);
+    arrow.line.material.transparent = true;
+    arrow.line.material.opacity = opacity;
+    arrow.cone.material.transparent = true;
+    arrow.cone.material.opacity = opacity;
+    arrow.line.material.linewidth = 2;
+    group.add(arrow);
+    arrows[a.name.toLowerCase()] = arrow;
+    if (withLabels){
+      const lbl = makeLabel(labelPrefix + a.name, `#${a.color.toString(16).padStart(6,'0')}`);
+      lbl.position.copy(a.dir).multiplyScalar(length + 0.35);
+      group.add(lbl);
+      arrows[a.name.toLowerCase()+'Label'] = lbl;
+    }
+  });
+  group.userData.arrows = arrows;
+  return group;
+}
+
+// World (fixed) frame — dim / translucent
+const worldFrame = buildFrame(3.6, 0.4, true, '');
+scene.add(worldFrame);
+// origin marker
+const originGeo = new THREE.SphereGeometry(0.07, 16, 16);
+const originMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const originMarker = new THREE.Mesh(originGeo, originMat);
+scene.add(originMarker);
+
+// Body (rotating) frame — bright / glowing, lives inside bodyGroup
+const bodyGroup = new THREE.Group();
+bodyGroup.matrixAutoUpdate = false; // we set bodyGroup.matrix directly from R for guaranteed consistency
+scene.add(bodyGroup);
+
+const bodyFrame = buildFrame(3.0, 1.0, true, 'B');
+bodyGroup.add(bodyFrame);
+// give body axes a glow-ish thicker look by overlaying slightly larger translucent arrows
+const bodyGlow = buildFrame(3.0, 0.25, false, '');
+bodyGroup.add(bodyGlow);
+
+/* ---------------- Simple aircraft/drone-like body object ---------------- */
+function buildBodyObject(){
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a3140, metalness:0.3, roughness:0.5, emissive:0x0c1220, emissiveIntensity:0.4 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xffb020, metalness:0.2, roughness:0.4 });
+
+  // fuselage — box tapering effect via cone nose
+  const fuselage = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.28, 0.6), bodyMat);
+  g.add(fuselage);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 4), accentMat);
+  nose.rotation.z = -Math.PI/2;
+  nose.position.x = 1.15;
+  g.add(nose);
+
+  // wings
+  const wingGeo = new THREE.BoxGeometry(0.5, 0.05, 1.9);
+  const wing = new THREE.Mesh(wingGeo, bodyMat);
+  wing.position.x = -0.05;
+  g.add(wing);
+
+  // tail fin (vertical, indicates "top")
+  const finGeo = new THREE.BoxGeometry(0.35, 0.5, 0.05);
+  const fin = new THREE.Mesh(finGeo, bodyMat);
+  fin.position.set(-0.75, 0.28, 0);
+  g.add(fin);
+
+  // FRONT arrow indicator (bright, along +X = forward/roll axis)
+  const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2.0, 0xffb020, 0.35, 0.18);
+  g.add(frontArrow);
+  const frontLabel = makeLabel('FRONT', '#ffb020');
+  frontLabel.position.set(2.2, 0, 0);
+  g.add(frontLabel);
+
+  // TOP indicator (small cyan marker above)
+  const topMarker = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 8), new THREE.MeshStandardMaterial({ color:0x23d5e0 }));
+  topMarker.position.set(0, 0.55, 0);
+  g.add(topMarker);
+  const topLabel = makeLabel('TOP', '#23d5e0');
+  topLabel.position.set(0, 0.9, 0);
+  g.add(topLabel);
+
+  // SIDE indicator (small marker on +Z side)
+  const sideMarker = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshStandardMaterial({ color:0x4d9dff }));
+  sideMarker.position.set(0, 0, 0.95);
+  g.add(sideMarker);
+
+  return g;
+}
+const bodyObject = buildBodyObject();
+bodyGroup.add(bodyObject);
+
+/* ---------------- Point P (body + world) ---------------- */
+const pointBodyGeo = new THREE.SphereGeometry(0.13, 20, 20);
+const pointBodyMat = new THREE.MeshStandardMaterial({ color: 0xff5c5c, emissive:0x330000 });
+const pointBodyMesh = new THREE.Mesh(pointBodyGeo, pointBodyMat);
+bodyGroup.add(pointBodyMesh);
+
+const bodyLineMat = new THREE.LineBasicMaterial({ color: 0xff5c5c, transparent:true, opacity:0.85 });
+const bodyLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)]);
+const bodyLine = new THREE.Line(bodyLineGeo, bodyLineMat);
+bodyGroup.add(bodyLine);
+
+const pointWorldGeo = new THREE.SphereGeometry(0.15, 20, 20);
+const pointWorldMat = new THREE.MeshStandardMaterial({ color: 0xffb020, emissive:0x241400 });
+const pointWorldMesh = new THREE.Mesh(pointWorldGeo, pointWorldMat);
+scene.add(pointWorldMesh);
+const worldLineMat = new THREE.LineBasicMaterial({ color: 0xffb020, transparent:true, opacity:0.9 });
+const worldLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)]);
+const worldLine = new THREE.Line(worldLineGeo, worldLineMat);
+scene.add(worldLine);
+
+const pointBodyLabel = makeLabel('P_body', '#ff5c5c');
+bodyGroup.add(pointBodyLabel);
+const pointWorldLabel = makeLabel('P_world', '#ffb020');
+scene.add(pointWorldLabel);
+
+/* ---------------- Rotation highlight arcs (protractor-style) ---------------- */
+const arcGroup = new THREE.Group();
+scene.add(arcGroup);
+const arcMats = {
+  x: new THREE.MeshBasicMaterial({ color:0xff5c5c, transparent:true, opacity:0.35, side:THREE.DoubleSide }),
+  y: new THREE.MeshBasicMaterial({ color:0x4ee08a, transparent:true, opacity:0.35, side:THREE.DoubleSide }),
+  z: new THREE.MeshBasicMaterial({ color:0x4d9dff, transparent:true, opacity:0.35, side:THREE.DoubleSide }),
+};
+let currentArcMesh = null;
+function updateRotationArc(){
+  if (currentArcMesh){ arcGroup.remove(currentArcMesh); currentArcMesh.geometry.dispose(); currentArcMesh = null; }
+  if (!state.toggles.arc || !state.activeAxis) return;
+  const axis = state.activeAxis;
+  const angleDeg = axis === 'x' ? state.roll : axis === 'y' ? state.pitch : state.yaw;
+  const angleRad = THREE.MathUtils.degToRad(angleDeg);
+  if (Math.abs(angleRad) < 0.001) return;
+  const radius = 2.1;
+  const thetaLength = Math.abs(angleRad);
+  const thetaStart = angleRad < 0 ? -thetaLength : 0;
+  const ring = new THREE.RingGeometry(radius*0.86, radius, 48, 1, thetaStart, thetaLength);
+  const mesh = new THREE.Mesh(ring, arcMats[axis]);
+  // Orient the ring's plane to be perpendicular to the rotation axis
+  if (axis === 'x') mesh.rotation.y = Math.PI/2;
+  else if (axis === 'y') mesh.rotation.x = Math.PI/2;
+  // z: ring already lies in XY plane by default — matches rotation about Z
+  arcGroup.add(mesh);
+  currentArcMesh = mesh;
+}
+
+/* ---------------- Axis-angle arrow ---------------- */
+const axisAngleArrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 3.2, 0x23d5e0, 0.3, 0.15);
+axisAngleArrow.visible = false;
+scene.add(axisAngleArrow);
+
+/* ---------------- Rotation trail ---------------- */
+const trailGroup = new THREE.Group();
+scene.add(trailGroup);
+const trailDotGeo = new THREE.SphereGeometry(0.035, 6, 6);
+const trailDotMat = new THREE.MeshBasicMaterial({ color:0x23d5e0, transparent:true, opacity:0.55 });
+function addTrailDot(){
+  if (!state.toggles.trail) return;
+  const dot = new THREE.Mesh(trailDotGeo, trailDotMat);
+  const tip = new THREE.Vector3(2.2, 0, 0).applyMatrix4(bodyGroup.matrix);
+  dot.position.copy(tip);
+  trailGroup.add(dot);
+  if (trailGroup.children.length > 250){
+    const old = trailGroup.children[0];
+    trailGroup.remove(old);
+    old.geometry === trailDotGeo ? null : old.geometry.dispose();
+  }
+}
+function clearTrail(){
+  while (trailGroup.children.length){
+    trailGroup.remove(trailGroup.children[0]);
+  }
+}
+
+/* ================================================================
+   MATHEMATICAL CORE
+   ================================================================ */
+
+// calculateRotationMatrix(): builds Rx, Ry, Rz and their product R = Rx*Ry*Rz
+function calculateRotationMatrix(rollDeg, pitchDeg, yawDeg){
+  const rx = THREE.MathUtils.degToRad(rollDeg);
+  const ry = THREE.MathUtils.degToRad(pitchDeg);
+  const rz = THREE.MathUtils.degToRad(yawDeg);
+
+  const Rx = new THREE.Matrix4().makeRotationX(rx);
+  const Ry = new THREE.Matrix4().makeRotationY(ry);
+  const Rz = new THREE.Matrix4().makeRotationZ(rz);
+
+  const R = Rx.clone().multiply(Ry).multiply(Rz); // R = Rx * Ry * Rz  (preserves original convention)
+
+  return { Rx, Ry, Rz, R };
+}
+
+function mat4ToRows(m){
+  const e = m.elements; // column-major
+  return [
+    [e[0], e[4], e[8]],
+    [e[1], e[5], e[9]],
+    [e[2], e[6], e[10]],
+  ];
+}
+
+/* ================================================================
+   UI UPDATE FUNCTIONS
+   ================================================================ */
+
+function renderMatrixGrid(gridEl, rows, decimals, highlightId){
+  gridEl.innerHTML = '';
+  rows.forEach((row, ri)=>{
+    row.forEach((val, ci)=>{
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.textContent = val.toFixed(decimals);
+      cell.dataset.key = `${ri}${ci}`;
+      gridEl.appendChild(cell);
+    });
+  });
+}
+
+let lastMatrixRows = null;
+function updateMatrixDisplay(R){
+  const rows = mat4ToRows(R);
+  const grid = $('matrixGrid');
+  renderMatrixGrid(grid, rows, state.decimals);
+  // flash cells that changed meaningfully
+  if (lastMatrixRows){
+    [...grid.children].forEach((cell, idx)=>{
+      const ri = Math.floor(idx/3), ci = idx%3;
+      if (Math.abs(rows[ri][ci] - lastMatrixRows[ri][ci]) > 0.0005){
+        cell.classList.add('flash');
+        setTimeout(()=>cell.classList.remove('flash'), 400);
+      }
+    });
+  }
+  lastMatrixRows = rows;
+}
+
+function updateDerivationPanel(Rx, Ry, Rz){
+  renderMatrixGrid($('rxGrid'), mat4ToRows(Rx), 2);
+  renderMatrixGrid($('ryGrid'), mat4ToRows(Ry), 2);
+  renderMatrixGrid($('rzGrid'), mat4ToRows(Rz), 2);
+}
+
+function updateMatrixProperties(R){
+  const det = R.determinant();
+  $('detVal').textContent = det.toFixed(3);
+  $('detVal').className = 'v ' + (Math.abs(det-1) < 0.01 ? 'ok' : 'bad');
+
+  // RtR check
+  const Rt = R.clone().transpose();
+  const RtR = Rt.multiply(R);
+  const e = RtR.elements;
+  let maxDev = 0;
+  for (let i=0;i<3;i++){
+    for (let j=0;j<3;j++){
+      const expected = (i===j) ? 1 : 0;
+      const idx = i + j*4;
+      maxDev = Math.max(maxDev, Math.abs(e[idx]-expected));
+    }
+  }
+  const orthogonal = maxDev < 0.01;
+  $('orthoVal').textContent = orthogonal ? '✓' : '✗';
+  $('orthoVal').className = 'v ' + (orthogonal ? 'ok' : 'bad');
+}
+
+function updatePointTransformation(R){
+  const dec = state.decimals;
+  const pb = new THREE.Vector3(state.point.x, state.point.y, state.point.z);
+  pointBodyMesh.position.copy(pb);
+  const pw = pb.clone().applyMatrix4(R);
+
+  $('bodyCoordsText').textContent = `(${pb.x.toFixed(dec)}, ${pb.y.toFixed(dec)}, ${pb.z.toFixed(dec)})`;
+  $('groundCoords').textContent = `(${pw.x.toFixed(dec)}, ${pw.y.toFixed(dec)}, ${pw.z.toFixed(dec)})`;
+
+  pointWorldMesh.position.copy(pw);
+  bodyLineGeo.setFromPoints([new THREE.Vector3(0,0,0), pb]);
+  bodyLineGeo.attributes.position.needsUpdate = true;
+  worldLineGeo.setFromPoints([new THREE.Vector3(0,0,0), pw]);
+  worldLineGeo.attributes.position.needsUpdate = true;
+
+  pointBodyLabel.position.copy(pb).add(new THREE.Vector3(0,0.3,0));
+  pointWorldLabel.position.copy(pw).add(new THREE.Vector3(0,0.3,0));
+}
+
+function updateLiveOrientationPanel(R){
+  $('liveRoll').textContent = state.roll.toFixed(1) + '°';
+  $('livePitch').textContent = state.pitch.toFixed(1) + '°';
+  $('liveYaw').textContent = state.yaw.toFixed(1) + '°';
+
+  const q = new THREE.Quaternion().setFromRotationMatrix(R);
+  $('qx').textContent = q.x.toFixed(3);
+  $('qy').textContent = q.y.toFixed(3);
+  $('qz').textContent = q.z.toFixed(3);
+  $('qw').textContent = q.w.toFixed(3);
+
+  // axis-angle
+  let angle = 2 * Math.acos(THREE.MathUtils.clamp(q.w, -1, 1));
+  let s = Math.sqrt(1 - q.w*q.w);
+  let ax = 0, ay = 1, az = 0;
+  if (s > 0.0001){ ax = q.x/s; ay = q.y/s; az = q.z/s; }
+  $('axisVal').textContent = `(${ax.toFixed(3)}, ${ay.toFixed(3)}, ${az.toFixed(3)})`;
+  $('angleVal').textContent = THREE.MathUtils.radToDeg(angle).toFixed(3) + '°';
+
+  if (state.toggles.axisArrow){
+    axisAngleArrow.visible = true;
+    axisAngleArrow.setDirection(new THREE.Vector3(ax,ay,az).normalize());
+  } else {
+    axisAngleArrow.visible = false;
+  }
+}
+
+const explainMap = {
+  x: 'ROLL rotates the body around its X-axis (forward axis).',
+  y: 'PITCH rotates the body around its Y-axis.',
+  z: 'YAW rotates the body around its Z-axis.',
+  null: 'Adjust Roll, Pitch, or Yaw to rotate the body frame relative to the fixed world frame.'
+};
+function updateExplainPanel(){
+  $('explainText').textContent = explainMap[state.activeAxis] || explainMap.null;
+  const pill = $('axisPill');
+  if (state.activeAxis){
+    pill.textContent = 'Rotation axis: ' + state.activeAxis.toUpperCase();
+    pill.classList.add('active');
+  } else {
+    pill.textContent = 'Rotation axis: —';
+    pill.classList.remove('active');
+  }
+}
+
+/* ================================================================
+   MASTER UPDATE (single choke point — guarantees consistency)
+   ================================================================ */
+function updateOrientation(){
+  const { Rx, Ry, Rz, R } = calculateRotationMatrix(state.roll, state.pitch, state.yaw);
+
+  // Apply to the actual 3D body group — same R used everywhere below.
+  bodyGroup.matrix.copy(R);
+
+  // Sliders / numeric fields stay in sync with state
+  rollSlider.value = state.roll; pitchSlider.value = state.pitch; yawSlider.value = state.yaw;
+  rollNum.value = Math.round(state.roll*10)/10;
+  pitchNum.value = Math.round(state.pitch*10)/10;
+  yawNum.value = Math.round(state.yaw*10)/10;
+
+  updateMatrixDisplay(R);
+  updateDerivationPanel(Rx, Ry, Rz);
+  updateMatrixProperties(R);
+  updatePointTransformation(R);
+  updateLiveOrientationPanel(R);
+  updateRotationArc();
+  updateExplainPanel();
+
+  applyToggleVisibility();
+}
+
+function applyToggleVisibility(){
+  worldFrame.visible = state.toggles.world;
+  bodyFrame.visible = state.toggles.body;
+  bodyGlow.visible = state.toggles.body;
+  gridHelper.visible = state.toggles.grid;
+  pointBodyMesh.visible = state.toggles.point;
+  pointWorldMesh.visible = state.toggles.point;
+  bodyLine.visible = state.toggles.point;
+  worldLine.visible = state.toggles.point;
+  pointBodyLabel.visible = state.toggles.point && state.toggles.labels;
+  pointWorldLabel.visible = state.toggles.point && state.toggles.labels;
+  trailGroup.visible = state.toggles.trail;
+
+  Object.values(worldFrame.userData.arrows).forEach(obj=>{
+    if (obj.type === 'Sprite') obj.visible = state.toggles.labels;
+  });
+  Object.values(bodyFrame.userData.arrows).forEach(obj=>{
+    if (obj.type === 'Sprite') obj.visible = state.toggles.labels;
+  });
+}
+
+/* ================================================================
+   PRESETS
+   ================================================================ */
+const PRESETS = {
+  identity: {roll:0, pitch:0, yaw:0},
+  roll90:   {roll:90, pitch:0, yaw:0},
+  pitch90:  {roll:0, pitch:90, yaw:0},
+  yaw90:    {roll:0, pitch:0, yaw:90},
+  roll45:   {roll:45, pitch:0, yaw:0},
+  pitch45:  {roll:0, pitch:45, yaw:0},
+  yaw45:    {roll:0, pitch:0, yaw:45},
+  combo:    {roll:57, pitch:-39, yaw:19},
+};
+
+/* ================================================================
+   ANIMATION (quaternion slerp from current orientation to target)
+   ================================================================ */
+let animFrameId = null;
+function animateTo(target, duration_ms, onDone){
+  cancelAnimation();
+  const start = { roll: state.roll, pitch: state.pitch, yaw: state.yaw };
+  const qStart = calculateRotationMatrix(start.roll, start.pitch, start.yaw).R;
+  const quatStart = new THREE.Quaternion().setFromRotationMatrix(qStart);
+  const qEnd = calculateRotationMatrix(target.roll, target.pitch, target.yaw).R;
+  const quatEnd = new THREE.Quaternion().setFromRotationMatrix(qEnd);
+
+  state.animating = true; state.animPaused = false;
+  const t0 = performance.now();
+
+  function frame(now){
+    if (state.animPaused){ animFrameId = requestAnimationFrame(frame); return; }
+    const t = Math.min(1, (now - t0) / duration_ms);
+    const q = new THREE.Quaternion().slerpQuaternions(quatStart, quatEnd, t);
+    // We still keep state.roll/pitch/yaw meaningful by lerping the numbers too,
+    // for the slider/readout display (visual body uses the slerped quaternion for smoothness).
+    state.roll = THREE.MathUtils.lerp(start.roll, target.roll, t);
+    state.pitch = THREE.MathUtils.lerp(start.pitch, target.pitch, t);
+    state.yaw = THREE.MathUtils.lerp(start.yaw, target.yaw, t);
+
+    bodyGroup.matrix.makeRotationFromQuaternion(q);
+    syncPanelsDuringAnimation();
+    addTrailDot();
+
+    if (t < 1){
+      animFrameId = requestAnimationFrame(frame);
+    } else {
+      state.animating = false;
+      state.roll = target.roll; state.pitch = target.pitch; state.yaw = target.yaw;
+      updateOrientation();
+      if (onDone) onDone();
+    }
+  }
+  animFrameId = requestAnimationFrame(frame);
+}
+function cancelAnimation(){
+  if (animFrameId){ cancelAnimationFrame(animFrameId); animFrameId = null; }
+  state.animating = false; state.animPaused = false;
+}
+// lighter-weight panel sync used every animation frame (avoids rebuilding bodyGroup.matrix twice)
+function syncPanelsDuringAnimation(){
+  const R = bodyGroup.matrix;
+  rollNum.value = Math.round(state.roll*10)/10;
+  pitchNum.value = Math.round(state.pitch*10)/10;
+  yawNum.value = Math.round(state.yaw*10)/10;
+  rollSlider.value = state.roll; pitchSlider.value = state.pitch; yawSlider.value = state.yaw;
+  updateMatrixDisplay(R);
+  updateMatrixProperties(R);
+  updatePointTransformation(R);
+  updateLiveOrientationPanel(R);
+}
+
+/* ================================================================
+   EVENT WIRING — sliders / numeric inputs / buttons
+   ================================================================ */
+function setAngle(axis, value){
+  state[axis] = value;
+  updateOrientation();
+}
+
+rollSlider.addEventListener('input', ()=>{ state.activeAxis='x'; setAngle('roll', parseFloat(rollSlider.value)); });
+pitchSlider.addEventListener('input', ()=>{ state.activeAxis='y'; setAngle('pitch', parseFloat(pitchSlider.value)); });
+yawSlider.addEventListener('input', ()=>{ state.activeAxis='z'; setAngle('yaw', parseFloat(yawSlider.value)); });
+[rollSlider,pitchSlider,yawSlider].forEach(s=>{
+  s.addEventListener('change', ()=>{ state.activeAxis=null; updateOrientation(); });
+});
+
+rollNum.addEventListener('change', ()=>{ state.activeAxis='x'; setAngle('roll', THREE.MathUtils.clamp(parseFloat(rollNum.value)||0,-180,180)); state.activeAxis=null; updateOrientation();});
+pitchNum.addEventListener('change', ()=>{ state.activeAxis='y'; setAngle('pitch', THREE.MathUtils.clamp(parseFloat(pitchNum.value)||0,-90,90)); state.activeAxis=null; updateOrientation();});
+yawNum.addEventListener('change', ()=>{ state.activeAxis='z'; setAngle('yaw', THREE.MathUtils.clamp(parseFloat(yawNum.value)||0,-180,180)); state.activeAxis=null; updateOrientation();});
+
+document.querySelectorAll('.mini-btn[data-adj]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const axis = btn.dataset.adj, dir = parseInt(btn.dataset.dir,10);
+    const limits = axis==='pitch' ? [-90,90] : [-180,180];
+    state.activeAxis = axis==='roll' ? 'x' : axis==='pitch' ? 'y' : 'z';
+    const next = THREE.MathUtils.clamp(state[axis] + dir, limits[0], limits[1]);
+    setAngle(axis, next);
+    setTimeout(()=>{ state.activeAxis=null; updateOrientation(); }, 350);
+  });
+});
+
+// Point P inputs
+['pX','pY','pZ'].forEach((id, i)=>{
+  const axis = ['x','y','z'][i];
+  $(id).addEventListener('input', ()=>{
+    state.point[axis] = parseFloat($(id).value) || 0;
+    updateOrientation();
+  });
+});
+
+// Decimals toggle
+document.querySelectorAll('[data-dec]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-dec]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.decimals = parseInt(btn.dataset.dec,10);
+    updateOrientation();
+  });
+});
+
+// Collapsible cards
+document.querySelectorAll('.collapsible .card-head').forEach(head=>{
+  head.addEventListener('click', ()=> head.parentElement.classList.toggle('collapsed'));
+});
+
+// Display toggles
+const toggleMap = { tglWorld:'world', tglBody:'body', tglLabels:'labels', tglPoint:'point', tglArc:'arc', tglGrid:'grid', tglAxisArrow:'axisArrow', tglTrail:'trail' };
+Object.entries(toggleMap).forEach(([id,key])=>{
+  $(id).addEventListener('change', (e)=>{
+    state.toggles[key] = e.target.checked;
+    if (key==='trail' && !e.target.checked) clearTrail();
+    updateOrientation();
+  });
+});
+
+/* ---------------- Presets ---------------- */
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const name = btn.dataset.preset;
+    let target;
+    if (name === 'random'){
+      target = { roll: Math.round(THREE.MathUtils.randFloatSpread(360)), pitch: Math.round(THREE.MathUtils.randFloatSpread(180)), yaw: Math.round(THREE.MathUtils.randFloatSpread(360)) };
+      target.roll = THREE.MathUtils.clamp(target.roll,-180,180);
+      target.pitch = THREE.MathUtils.clamp(target.pitch,-90,90);
+      target.yaw = THREE.MathUtils.clamp(target.yaw,-180,180);
+    } else {
+      target = PRESETS[name];
+    }
+    state.activeAxis = null;
+    animateTo(target, 900);
+  });
+});
+
+/* ---------------- Full-rotation animation controls ---------------- */
+$('playBtn').addEventListener('click', ()=>{
+  if (state.animating){ state.animPaused = false; return; }
+  const target = { roll: state.roll, pitch: state.pitch, yaw: state.yaw };
+  const start = { roll: 0, pitch: 0, yaw: 0 };
+  state.roll = 0; state.pitch = 0; state.yaw = 0; // animate FROM zero TO the dialed-in target, as requested
+  const duration = 2600 / state.speed;
+  animateTo(target, duration);
+});
+$('pauseBtn').addEventListener('click', ()=>{ state.animPaused = !state.animPaused; });
+$('animResetBtn').addEventListener('click', ()=>{
+  cancelAnimation();
+  state.roll = 0; state.pitch = 0; state.yaw = 0;
+  updateOrientation();
+});
+$('stepFrameBtn').addEventListener('click', ()=>{
+  // single small nudge forward, useful when paused
+  cancelAnimation();
+  state.roll = THREE.MathUtils.clamp(state.roll + 5, -180, 180);
+  updateOrientation();
+});
+$('speedSlider').addEventListener('input', (e)=>{ state.speed = parseFloat(e.target.value); });
+
+/* ---------------- Step-by-step mode ---------------- */
+const stepCaptions = [
+  'Step 1 — <b>Roll</b>: rotation about the X-axis.',
+  'Step 2 — <b>Pitch</b>: rotation about the (new) Y-axis, applied after Roll.',
+  'Step 3 — <b>Yaw</b>: rotation about the (new) Z-axis, applied after Roll &amp; Pitch.'
+];
+let stepTargets = { roll:45, pitch:-30, yaw:60 }; // default demo values for stepping through
+function refreshStepUI(){
+  [0,1,2].forEach(i=>{
+    const dot = $('dot'+i);
+    dot.classList.toggle('done', i < state.currentStep);
+    dot.classList.toggle('current', i === state.currentStep);
+  });
+  $('stepCaption').innerHTML = stepCaptions[state.currentStep];
+  $('prevStepBtn').disabled = state.currentStep === 0;
+  $('nextStepBtn').textContent = state.currentStep === 2 ? '✓ Done' : 'Next →';
+}
+function applyStep(stepIndex){
+  state.currentStep = stepIndex;
+  const r = stepIndex >= 0 ? stepTargets.roll : 0;
+  const p = stepIndex >= 1 ? stepTargets.pitch : 0;
+  const y = stepIndex >= 2 ? stepTargets.yaw : 0;
+  state.activeAxis = stepIndex===0 ? 'x' : stepIndex===1 ? 'y' : 'z';
+  animateTo({roll:r,pitch:p,yaw:y}, 900, ()=>{ /* keep activeAxis for highlight */ updateOrientation(); });
+  refreshStepUI();
+}
+$('nextStepBtn').addEventListener('click', ()=>{
+  if (state.currentStep < 2) applyStep(state.currentStep+1);
+});
+$('prevStepBtn').addEventListener('click', ()=>{
+  if (state.currentStep > 0) applyStep(state.currentStep-1);
+});
+
+$('modeFullBtn').addEventListener('click', ()=> setStepMode(false));
+$('modeStepBtn').addEventListener('click', ()=> setStepMode(true));
+function setStepMode(on){
+  state.stepMode = on;
+  $('modeFullBtn').classList.toggle('active', !on);
+  $('modeStepBtn').classList.toggle('active', on);
+  $('fullView').style.display = on ? 'none' : 'block';
+  $('stepView').classList.toggle('active', on);
+  $('modePill').textContent = on ? 'Step-by-Step' : 'Full Rotation';
+  if (on){
+    stepTargets = { roll: state.roll || 45, pitch: state.pitch || -30, yaw: state.yaw || 60 };
+    applyStep(0);
+  } else {
+    state.activeAxis = null;
+    updateOrientation();
+  }
+}
+
+/* ---------------- Camera controls ---------------- */
+const CAM_VIEWS = {
+  iso:   { pos: [6.5,5,8],  up:[0,1,0] },
+  top:   { pos: [0,10,0.001], up:[0,0,-1] },
+  front: { pos: [0,0,10],   up:[0,1,0] },
+  side:  { pos: [10,0,0],   up:[0,1,0] },
+};
+function flyCameraTo(pos, up){
+  const startPos = camera.position.clone();
+  const startUp = camera.up.clone();
+  const endPos = new THREE.Vector3(...pos);
+  const endUp = new THREE.Vector3(...up);
+  const t0 = performance.now(), dur=650;
+  controls.enabled = false;
+  function step(now){
+    const t = Math.min(1,(now-t0)/dur);
+    const ease = t<0.5 ? 2*t*t : -1+(4-2*t)*t;
+    camera.position.lerpVectors(startPos, endPos, ease);
+    camera.up.lerpVectors(startUp, endUp, ease).normalize();
+    camera.lookAt(0,0,0);
+    if (t<1) requestAnimationFrame(step); else controls.enabled = true;
+  }
+  requestAnimationFrame(step);
+}
+document.querySelectorAll('[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const v = CAM_VIEWS[btn.dataset.view];
+    flyCameraTo(v.pos, v.up);
+  });
+});
+$('resetCamBtn').addEventListener('click', ()=> flyCameraTo([6.5,5,8],[0,1,0]));
+$('followBody').addEventListener('change', (e)=>{ state.followBody = e.target.checked; });
+
+/* ---------------- Reset ---------------- */
+$('resetBtn').addEventListener('click', fullReset);
+function fullReset(){
+  cancelAnimation();
+  state.roll=0; state.pitch=0; state.yaw=0;
+  state.point = {x:3,y:2,z:2};
+  $('pX').value=3; $('pY').value=2; $('pZ').value=2;
+  state.activeAxis = null;
+  clearTrail();
+  setStepMode(false);
+  flyCameraTo([6.5,5,8],[0,1,0]);
+  updateOrientation();
+}
+
+/* ---------------- Demo mode ---------------- */
+let demoRunning = false;
+$('demoBtn').addEventListener('click', ()=>{
+  if (demoRunning) return;
+  runDemo();
+});
+async function runDemo(){
+  demoRunning = true;
+  const demoBtn = $('demoBtn');
+  demoBtn.textContent = '⏳ Running…';
+  demoBtn.disabled = true;
+  setStepMode(false);
+  const wait = ms => new Promise(res=>setTimeout(res, ms));
+
+  fullReset();
+  await wait(500);
+
+  state.activeAxis = 'x';
+  await new Promise(res=> animateTo({roll:57,pitch:0,yaw:0}, 1400, res));
+  await wait(700);
+
+  state.activeAxis = 'y';
+  await new Promise(res=> animateTo({roll:57,pitch:-39,yaw:0}, 1400, res));
+  await wait(700);
+
+  state.activeAxis = 'z';
+  await new Promise(res=> animateTo({roll:57,pitch:-39,yaw:19}, 1400, res));
+  await wait(700);
+
+  state.activeAxis = null;
+  updateOrientation();
+  $('derivCard').classList.remove('collapsed');
+  await wait(1800);
+  $('propsCard').classList.remove('collapsed');
+  await wait(1200);
+
+  demoBtn.textContent = '▶ Demo Mode';
+  demoBtn.disabled = false;
+  demoRunning = false;
+}
+
+/* ---------------- Keyboard shortcuts ---------------- */
+const kbdModal = $('kbdModal');
+$('kbdBtn').addEventListener('click', ()=> kbdModal.classList.add('open'));
+$('kbdCloseBtn').addEventListener('click', ()=> kbdModal.classList.remove('open'));
+window.addEventListener('keydown', (e)=>{
+  const tag = document.activeElement.tagName;
+  if (tag === 'INPUT') return; // don't hijack typing in number fields
+  switch(e.key){
+    case 'x': state.activeAxis='x'; setAngle('roll', THREE.MathUtils.clamp(state.roll+5,-180,180)); break;
+    case 'X': state.activeAxis='x'; setAngle('roll', THREE.MathUtils.clamp(state.roll-5,-180,180)); break;
+    case 'y': state.activeAxis='y'; setAngle('pitch', THREE.MathUtils.clamp(state.pitch+5,-90,90)); break;
+    case 'Y': state.activeAxis='y'; setAngle('pitch', THREE.MathUtils.clamp(state.pitch-5,-90,90)); break;
+    case 'z': state.activeAxis='z'; setAngle('yaw', THREE.MathUtils.clamp(state.yaw+5,-180,180)); break;
+    case 'Z': state.activeAxis='z'; setAngle('yaw', THREE.MathUtils.clamp(state.yaw-5,-180,180)); break;
+    case ' ': e.preventDefault(); state.animating ? (state.animPaused=!state.animPaused) : $('playBtn').click(); break;
+    case 'r': case 'R': fullReset(); break;
+    case 'c': case 'C': flyCameraTo([6.5,5,8],[0,1,0]); break;
+    case 'Escape': kbdModal.classList.remove('open'); break;
+  }
+});
+
+/* ================================================================
+   RENDER LOOP  (kept lightweight — no per-frame allocations)
+   ================================================================ */
+function renderLoop(){
+  requestAnimationFrame(renderLoop);
+  controls.update();
+
+  if (state.followBody){
+    const forward = new THREE.Vector3(1,0,0).applyMatrix4(bodyGroup.matrix).normalize();
+    const desired = forward.clone().multiplyScalar(-7).add(new THREE.Vector3(0,3,0));
+    camera.position.lerp(desired, 0.04);
+    controls.target.lerp(new THREE.Vector3(0,0,0), 0.08);
+  }
+
+  // Sprite labels should always face the camera (Three.js Sprites already do this by default)
+  renderer.render(scene, camera);
+}
+
+/* ---------------- Init ---------------- */
+updateOrientation();
+renderLoop();
+
+})();
+</script>
 </body>
 </html>
