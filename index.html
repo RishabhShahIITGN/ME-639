@@ -165,12 +165,9 @@
             </div>
             
             <div class="data-section">
-                <h3>3x3 Rotation Matrix</h3>
-                <div class="matrix-display" id="matrixDisplay">
-[ 1.00,  0.00,  0.00 ]
-[ 0.00,  1.00,  0.00 ]
-[ 0.00,  0.00,  1.00 ]
-                </div>
+                <h3>Point P Coordinates</h3>
+                <p>Body Frame: (2.00, 2.00, 2.00)</p>
+                <p>Ground Frame: <span id="groundCoords" style="font-family: monospace; font-weight: bold;">(2.00, 2.00, 2.00)</span></p>
             </div>
 
         </div>
@@ -211,6 +208,17 @@
         // Make the body axes thicker for visibility
         bodyAxes.material.linewidth = 3; 
         scene.add(bodyAxes);
+        // Create Point P as a small sphere
+        const pointGeo = new THREE.SphereGeometry(0.15, 16, 16);
+        const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red point
+        const pointP = new THREE.Mesh(pointGeo, pointMat);
+        
+        // Set its position in the body frame
+        pointP.position.set(2, 2, 2);
+        
+        // **CRITICAL:** Add the point TO the body axes, not the scene. 
+        // This makes it rotate with the body frame automatically.
+        bodyAxes.add(pointP);
 
         // --- 3. UI AND MATH LOGIC ---
         
@@ -256,6 +264,15 @@
                           `[ ${e[2].toFixed(2).padStart(5)}, ${e[6].toFixed(2).padStart(5)}, ${e[10].toFixed(2).padStart(5)} ]`;
             
             matrixDisplay.innerText = mText;
+            // Create a vector to hold the global coordinates
+            const globalPos = new THREE.Vector3();
+            
+            // Ask Three.js to calculate where pointP is in the global world
+            pointP.getWorldPosition(globalPos);
+            
+            // Update the HTML text
+            document.getElementById('groundCoords').innerText = 
+                `(${globalPos.x.toFixed(2)}, ${globalPos.y.toFixed(2)}, ${globalPos.z.toFixed(2)})`;
         }
 
         // Add event listeners to sliders
