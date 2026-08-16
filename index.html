@@ -652,7 +652,7 @@ container.appendChild(renderer.domElement);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.target.set(2,0,0);
+controls.target.set(0,0,0);
 
 // Lighting (subtle — mostly for the solid body object)
 scene.add(new THREE.AmbientLight(0x8899aa, 0.9));
@@ -1008,7 +1008,12 @@ function updateLiveOrientationPanel(R){
 
   if (state.toggles.axisArrow){
     axisAngleArrow.visible = true;
-    axisAngleArrow.setDirection(new THREE.Vector3(ax,ay,az).normalize());
+    const dir = new THREE.Vector3(ax, ay, az);
+    // Guard against a zero-length axis (identity rotation) — normalize() on a
+    // zero vector is safe in Three.js but leaves (0,0,0), which is not a valid
+    // arrow direction, so fall back to a default "up" direction instead.
+    if (dir.lengthSq() < 1e-8) dir.set(0,1,0); else dir.normalize();
+    axisAngleArrow.setDirection(dir);
   } else {
     axisAngleArrow.visible = false;
   }
@@ -1095,40 +1100,96 @@ const PRESETS = {
 
 /* ================================================================
    ANIMATION (quaternion slerp from current orientation to target)
+   ------------------------------------------------------------------
+   NOTE: this uses a small self-contained slerp implementation rather
+   than THREE.Quaternion.prototype.slerpQuaternions(). That built-in
+   helper triggered an internal "reading '_x' of undefined" crash on
+   some Three.js r128 CDN builds during Play/Demo Mode. Implementing
+   the interpolation manually (reading only the public x/y/z/w
+   getters, and writing through .set()) sidesteps that entirely.
    ================================================================ */
 let animFrameId = null;
+
+function slerpQuat(qa, qb, t, out){
+  let ax = qa.x, ay = qa.y, az = qa.z, aw = qa.w;
+  let bx = qb.x, by = qb.y, bz = qb.z, bw = qb.w;
+
+  let cosHalfTheta = ax*bx + ay*by + az*bz + aw*bw;
+  if (cosHalfTheta < 0){ bx=-bx; by=-by; bz=-bz; bw=-bw; cosHalfTheta=-cosHalfTheta; }
+
+  if (cosHalfTheta >= 1.0 - 1e-9){
+    out.set(ax, ay, az, aw);
+    return out;
+  }
+
+  const sqrSinHalfTheta = 1.0 - cosHalfTheta*cosHalfTheta;
+  if (sqrSinHalfTheta <= Number.EPSILON){
+    // Angles are extremely close — plain lerp + normalize is numerically stable here.
+    const s = 1 - t;
+    out.set(s*ax + t*bx, s*ay + t*by, s*az + t*bz, s*aw + t*bw);
+    out.normalize();
+    return out;
+  }
+
+  const sinHalfTheta = Math.sqrt(sqrSinHalfTheta);
+  const halfTheta = Math.atan2(sinHalfTheta, cosHalfTheta);
+  const ratioA = Math.sin((1 - t) * halfTheta) / sinHalfTheta;
+  const ratioB = Math.sin(t * halfTheta) / sinHalfTheta;
+
+  out.set(
+    ax*ratioA + bx*ratioB,
+    ay*ratioA + by*ratioB,
+    az*ratioA + bz*ratioB,
+    aw*ratioA + bw*ratioB
+  );
+  return out;
+}
+
 function animateTo(target, duration_ms, onDone){
   cancelAnimation();
   const start = { roll: state.roll, pitch: state.pitch, yaw: state.yaw };
-  const qStart = calculateRotationMatrix(start.roll, start.pitch, start.yaw).R;
-  const quatStart = new THREE.Quaternion().setFromRotationMatrix(qStart);
-  const qEnd = calculateRotationMatrix(target.roll, target.pitch, target.yaw).R;
-  const quatEnd = new THREE.Quaternion().setFromRotationMatrix(qEnd);
+  const quatStart = new THREE.Quaternion().setFromRotationMatrix(calculateRotationMatrix(start.roll, start.pitch, start.yaw).R);
+  const quatEnd = new THREE.Quaternion().setFromRotationMatrix(calculateRotationMatrix(target.roll, target.pitch, target.yaw).R);
+  const qOut = new THREE.Quaternion();
 
   state.animating = true; state.animPaused = false;
   const t0 = performance.now();
 
+  function finish(){
+    state.animating = false;
+    state.roll = target.roll; state.pitch = target.pitch; state.yaw = target.yaw;
+    updateOrientation();
+    if (onDone) onDone();
+  }
+
   function frame(now){
-    if (state.animPaused){ animFrameId = requestAnimationFrame(frame); return; }
-    const t = Math.min(1, (now - t0) / duration_ms);
-    const q = new THREE.Quaternion().slerpQuaternions(quatStart, quatEnd, t);
-    // We still keep state.roll/pitch/yaw meaningful by lerping the numbers too,
-    // for the slider/readout display (visual body uses the slerped quaternion for smoothness).
-    state.roll = THREE.MathUtils.lerp(start.roll, target.roll, t);
-    state.pitch = THREE.MathUtils.lerp(start.pitch, target.pitch, t);
-    state.yaw = THREE.MathUtils.lerp(start.yaw, target.yaw, t);
+    try{
+      if (state.animPaused){ animFrameId = requestAnimationFrame(frame); return; }
+      const t = Math.min(1, (now - t0) / duration_ms);
 
-    bodyGroup.matrix.makeRotationFromQuaternion(q);
-    syncPanelsDuringAnimation();
-    addTrailDot();
+      slerpQuat(quatStart, quatEnd, t, qOut);
 
-    if (t < 1){
-      animFrameId = requestAnimationFrame(frame);
-    } else {
-      state.animating = false;
-      state.roll = target.roll; state.pitch = target.pitch; state.yaw = target.yaw;
-      updateOrientation();
-      if (onDone) onDone();
+      // Keep state.roll/pitch/yaw meaningful for the slider/readout display
+      // (the visual body uses the slerped quaternion for smoothness).
+      state.roll = THREE.MathUtils.lerp(start.roll, target.roll, t);
+      state.pitch = THREE.MathUtils.lerp(start.pitch, target.pitch, t);
+      state.yaw = THREE.MathUtils.lerp(start.yaw, target.yaw, t);
+
+      bodyGroup.matrix.makeRotationFromQuaternion(qOut);
+      syncPanelsDuringAnimation();
+      addTrailDot();
+
+      if (t < 1){
+        animFrameId = requestAnimationFrame(frame);
+      } else {
+        finish();
+      }
+    } catch(err){
+      // Defensive fallback: never let an animation-math edge case crash the page —
+      // snap straight to the target orientation instead.
+      console.warn('Animation frame recovered from an error, snapping to target:', err);
+      cancelAnimation();
+      finish();
     }
   }
   animFrameId = requestAnimationFrame(frame);
