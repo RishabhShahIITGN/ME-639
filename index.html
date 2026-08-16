@@ -652,7 +652,7 @@ container.appendChild(renderer.domElement);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.target.set(4,0,0);
+controls.target.set(0,0,0);
 
 // Lighting (subtle — mostly for the solid body object)
 scene.add(new THREE.AmbientLight(0x8899aa, 0.9));
@@ -735,6 +735,7 @@ scene.add(originMarker);
 // Body (rotating) frame — bright / glowing, lives inside bodyGroup
 const bodyGroup = new THREE.Group();
 bodyGroup.matrixAutoUpdate = false; // we set bodyGroup.matrix directly from R for guaranteed consistency
+bodyGroup.position.set(-1, 0, 0); // Adjust -1 if it needs to go further left/right
 scene.add(bodyGroup);
 
 const bodyFrame = buildFrame(3.0, 1.0, true, 'B');
