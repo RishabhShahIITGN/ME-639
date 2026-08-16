@@ -122,6 +122,7 @@ a{ color: var(--cyan); }
 .stage-hud-corner.br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; border-radius: 0 0 4px 0;}
 
 #canvasContainer{ width:100%; height: 100%; display:block; touch-action:none; }
+#canvasContainer canvas{ display:block; width:100% !important; height:100% !important; }
 .stage-inner{ position:relative; width:100%; height: min(64vh, 640px); min-height: 380px; }
 
 .stage-overlay-top{
@@ -347,6 +348,7 @@ kbd{ background:#232a37; border-radius:4px; padding:1px 6px; font-family: var(--
         <div class="stage-overlay-top">
           <span class="pill" id="axisPill">Rotation axis: —</span>
           <span class="pill" id="modePill">Full Rotation</span>
+          <span class="pill" style="color:var(--text-faint);">World: X Y Z &nbsp;·&nbsp; Body: X′ Y′ Z′</span>
         </div>
 
         <div class="cam-controls">
@@ -642,7 +644,7 @@ const stageInner = document.querySelector('.stage-inner');
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-const DEFAULT_CAM_POS = new THREE.Vector3(6.5, 5, 8);
+const DEFAULT_CAM_POS = new THREE.Vector3(7.5, 5.8, 9.2);
 camera.position.copy(DEFAULT_CAM_POS);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -662,7 +664,14 @@ scene.add(key);
 
 function resizeRenderer(){
   const w = stageInner.clientWidth, h = stageInner.clientHeight;
-  renderer.setSize(w, h, false);
+  // IMPORTANT: pass `true` (the default) so Three.js sets the canvas's CSS
+  // width/height to match the container exactly. Passing `false` here was
+  // the root cause of the model appearing shoved into a corner: the canvas's
+  // drawing-buffer size (container size * devicePixelRatio) was being used
+  // as its on-screen CSS size too, so on any HiDPI display the canvas
+  // rendered 1.5–2x too large and the container's overflow:hidden clipped
+  // it — leaving only an off-center slice of the scene visible.
+  renderer.setSize(w, h, true);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -675,27 +684,60 @@ gridHelper.position.y = -1.6;
 scene.add(gridHelper);
 
 /* ---------------- Text sprite label helper ---------------- */
-function makeLabel(text, color){
+// Renders crisp, high-res text on a rounded "chip" background so labels stay
+// legible and visually distinct even when several sit close together.
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function makeLabel(text, color, sizeScale){
+  sizeScale = sizeScale || 1;
   const canvas = document.createElement('canvas');
-  canvas.width = 128; canvas.height = 64;
+  canvas.width = 320; canvas.height = 140;
   const ctx = canvas.getContext('2d');
-  ctx.font = 'bold 40px monospace';
+  ctx.font = '700 62px "JetBrains Mono", monospace';
+  const textW = ctx.measureText(text).width;
+  const boxW = Math.min(canvas.width - 8, textW + 44);
+  const boxH = 84;
+  const bx = (canvas.width - boxW) / 2, by = (canvas.height - boxH) / 2;
+
+  roundRectPath(ctx, bx, by, boxW, boxH, 16);
+  ctx.fillStyle = 'rgba(8,11,16,0.78)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+
+  ctx.font = '700 58px "JetBrains Mono", monospace';
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.9)';
-  ctx.shadowBlur = 8;
-  ctx.fillText(text, 64, 32);
+  ctx.fillText(text, canvas.width/2, canvas.height/2 + 3);
+
   const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.anisotropy = 4;
   const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent:true });
   const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(0.6, 0.3, 1);
+  const aspect = canvas.width / canvas.height;
+  const h = 0.42 * sizeScale;
+  sprite.scale.set(h * aspect, h, 1);
+  sprite.renderOrder = 999;
   return sprite;
 }
 
 /* ---------------- Reusable axis-frame builder ---------------- */
 // Builds a set of 3 colored arrows (+labels) representing a coordinate frame.
-function buildFrame(length, opacity, withLabels, labelPrefix){
+// World axes are labeled plainly (X, Y, Z); body axes use the standard
+// "rotated frame" prime notation (X′, Y′, Z′) so the two frames are never
+// ambiguous, and the world frame is drawn longer than the body frame so
+// their label chips land at different radii and never overlap.
+function buildFrame(length, opacity, withLabels, labelSuffix, labelSizeScale){
   const group = new THREE.Group();
   const axes = [
     { dir: new THREE.Vector3(1,0,0), color: 0xff5c5c, name:'X' },
@@ -713,8 +755,8 @@ function buildFrame(length, opacity, withLabels, labelPrefix){
     group.add(arrow);
     arrows[a.name.toLowerCase()] = arrow;
     if (withLabels){
-      const lbl = makeLabel(labelPrefix + a.name, `#${a.color.toString(16).padStart(6,'0')}`);
-      lbl.position.copy(a.dir).multiplyScalar(length + 0.35);
+      const lbl = makeLabel(a.name + labelSuffix, `#${a.color.toString(16).padStart(6,'0')}`, labelSizeScale);
+      lbl.position.copy(a.dir).multiplyScalar(length + 0.45);
       group.add(lbl);
       arrows[a.name.toLowerCase()+'Label'] = lbl;
     }
@@ -723,25 +765,26 @@ function buildFrame(length, opacity, withLabels, labelPrefix){
   return group;
 }
 
-// World (fixed) frame — dim / translucent
-const worldFrame = buildFrame(3.6, 0.4, true, '');
+// World (fixed) frame — dim / translucent, drawn longest so its labels sit
+// clearly outside the body frame's labels.
+const worldFrame = buildFrame(4.2, 0.45, true, '', 1);
 scene.add(worldFrame);
 // origin marker
-const originGeo = new THREE.SphereGeometry(0.07, 16, 16);
+const originGeo = new THREE.SphereGeometry(0.08, 16, 16);
 const originMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const originMarker = new THREE.Mesh(originGeo, originMat);
 scene.add(originMarker);
 
-// Body (rotating) frame — bright / glowing, lives inside bodyGroup
+// Body (rotating) frame — bright / glowing, lives inside bodyGroup.
+// Shorter than the world frame + prime notation keeps it visually distinct.
 const bodyGroup = new THREE.Group();
 bodyGroup.matrixAutoUpdate = false; // we set bodyGroup.matrix directly from R for guaranteed consistency
-bodyGroup.position.set(-1, 0, 0); // Adjust -1 if it needs to go further left/right
 scene.add(bodyGroup);
 
-const bodyFrame = buildFrame(3.0, 1.0, true, 'B');
+const bodyFrame = buildFrame(2.6, 1.0, true, '\u2032', 0.85); // ′ = prime, e.g. "X′"
 bodyGroup.add(bodyFrame);
 // give body axes a glow-ish thicker look by overlaying slightly larger translucent arrows
-const bodyGlow = buildFrame(3.0, 0.25, false, '');
+const bodyGlow = buildFrame(2.6, 0.25, false, '\u2032', 0.85);
 bodyGroup.add(bodyGlow);
 
 /* ---------------- Simple aircraft/drone-like body object ---------------- */
@@ -771,19 +814,21 @@ function buildBodyObject(){
   fin.position.set(-0.75, 0.28, 0);
   g.add(fin);
 
-  // FRONT arrow indicator (bright, along +X = forward/roll axis)
-  const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2.0, 0xffb020, 0.35, 0.18);
+  // FRONT arrow indicator (bright, along +X = forward/roll axis).
+  // Kept shorter than the body X′ axis arrow so its label sits clearly
+  // between the object and the body-frame label, not on top of it.
+  const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1.55, 0xffb020, 0.32, 0.16);
   g.add(frontArrow);
-  const frontLabel = makeLabel('FRONT', '#ffb020');
-  frontLabel.position.set(2.2, 0, 0);
+  const frontLabel = makeLabel('FRONT', '#ffb020', 0.8);
+  frontLabel.position.set(1.75, 0.28, 0);
   g.add(frontLabel);
 
   // TOP indicator (small cyan marker above)
   const topMarker = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 8), new THREE.MeshStandardMaterial({ color:0x23d5e0 }));
   topMarker.position.set(0, 0.55, 0);
   g.add(topMarker);
-  const topLabel = makeLabel('TOP', '#23d5e0');
-  topLabel.position.set(0, 0.9, 0);
+  const topLabel = makeLabel('TOP', '#23d5e0', 0.75);
+  topLabel.position.set(0, 0.92, 0);
   g.add(topLabel);
 
   // SIDE indicator (small marker on +Z side)
@@ -816,9 +861,9 @@ const worldLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3
 const worldLine = new THREE.Line(worldLineGeo, worldLineMat);
 scene.add(worldLine);
 
-const pointBodyLabel = makeLabel('P_body', '#ff5c5c');
+const pointBodyLabel = makeLabel('P_body', '#ff5c5c', 0.9);
 bodyGroup.add(pointBodyLabel);
-const pointWorldLabel = makeLabel('P_world', '#ffb020');
+const pointWorldLabel = makeLabel('P_world', '#ffb020', 0.9);
 scene.add(pointWorldLabel);
 
 /* ---------------- Rotation highlight arcs (protractor-style) ---------------- */
@@ -1369,11 +1414,13 @@ function setStepMode(on){
 }
 
 /* ---------------- Camera controls ---------------- */
+// Slightly larger than a tight bounding box around the (now longer) world
+// frame + its label chips, so nothing sits right at the edge of the view.
 const CAM_VIEWS = {
-  iso:   { pos: [6.5,5,8],  up:[0,1,0] },
-  top:   { pos: [0,10,0.001], up:[0,0,-1] },
-  front: { pos: [0,0,10],   up:[0,1,0] },
-  side:  { pos: [10,0,0],   up:[0,1,0] },
+  iso:   { pos: [7.5,5.8,9.2], up:[0,1,0] },
+  top:   { pos: [0,11.5,0.001], up:[0,0,-1] },
+  front: { pos: [0,0,11.5],   up:[0,1,0] },
+  side:  { pos: [11.5,0,0],   up:[0,1,0] },
 };
 function flyCameraTo(pos, up){
   const startPos = camera.position.clone();
@@ -1398,7 +1445,7 @@ document.querySelectorAll('[data-view]').forEach(btn=>{
     flyCameraTo(v.pos, v.up);
   });
 });
-$('resetCamBtn').addEventListener('click', ()=> flyCameraTo([6.5,5,8],[0,1,0]));
+$('resetCamBtn').addEventListener('click', ()=> flyCameraTo([7.5,5.8,9.2],[0,1,0]));
 $('followBody').addEventListener('change', (e)=>{ state.followBody = e.target.checked; });
 
 /* ---------------- Reset ---------------- */
@@ -1411,7 +1458,7 @@ function fullReset(){
   state.activeAxis = null;
   clearTrail();
   setStepMode(false);
-  flyCameraTo([6.5,5,8],[0,1,0]);
+  flyCameraTo([7.5,5.8,9.2],[0,1,0]);
   updateOrientation();
 }
 
@@ -1472,7 +1519,7 @@ window.addEventListener('keydown', (e)=>{
     case 'Z': state.activeAxis='z'; setAngle('yaw', THREE.MathUtils.clamp(state.yaw-5,-180,180)); break;
     case ' ': e.preventDefault(); state.animating ? (state.animPaused=!state.animPaused) : $('playBtn').click(); break;
     case 'r': case 'R': fullReset(); break;
-    case 'c': case 'C': flyCameraTo([6.5,5,8],[0,1,0]); break;
+    case 'c': case 'C': flyCameraTo([7.5,5.8,9.2],[0,1,0]); break;
     case 'Escape': kbdModal.classList.remove('open'); break;
   }
 });
