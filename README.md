@@ -1,50 +1,74 @@
-# 3D Rigid Body Rotation & Euler Angle Visualizer 🚁
+# Interactive 3D Rigid Body Rotation Laboratory
 
-An interactive, web-based educational tool designed to visualize 3D coordinate frame rotations, Euler angles, and rotation matrices in real-time. This project was built as an assignment for the **Introduction to Robotics** course to bridge the gap between complex matrix mathematics and physical 3D spatial awareness.
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)]()
+[![WebGL Supported](https://img.shields.io/badge/WebGL-Supported-orange.svg)]()
 
-### 🔗 Quick Links
-* **Live Web Application:** [INSERT YOUR GITHUB PAGES .IO LINK HERE]
-* **Video Demonstration:** [INSERT YOUR YOUTUBE VIDEO LINK HERE]
+An interactive, browser-based visualization tool for rigid body kinematics. This application provides real-time rendering of 3D coordinate frame rotations, Euler angle sequences, and their corresponding rotation matrices.
+
+Developed as a technical demonstration for **Introduction to Robotics**, this tool bridges the gap between abstract matrix algebra and physical 3D spatial orientation.
+
+### 🔗 Resources
+* **Live Application:** [Insert GitHub Pages Link Here]
+* **Video Demonstration:** [Insert YouTube Link Here]
 
 ---
 
-## 🎯 Project Overview
+## 📑 Table of Contents
+1. [Overview](#-overview)
+2. [Core Features](#-core-features)
+3. [Mathematical Formulation](#-mathematical-formulation)
+4. [Technology Stack](#-technology-stack)
+5. [Local Installation](#-local-installation)
 
-In robotics, understanding how an object is oriented in 3D space is critical for kinematics, dynamics, and control. This tool allows users to manipulate the Roll, Pitch, and Yaw of a 3D body (represented by an aircraft model) and instantly see the underlying mathematics update. 
+---
 
-The primary goal of this application is to demonstrate the sequence:
+## 🎯 Overview
+
+In robotics and aerospace engineering, determining the orientation of an end-effector or chassis in 3D space is critical for accurate kinematics, dynamics, and control. This application allows users to manipulate the Roll, Pitch, and Yaw of a rigid body and instantly observe the underlying mathematical transformations.
+
+The application strictly models the progression:
 **Euler Angles ➔ 3D Rotation ➔ Rotation Matrix ➔ Coordinate Transformation**
+
+---
 
 ## ✨ Core Features
 
-* **Interactive 3D Stage:** Features a fixed World Frame (dim axes) and a rotating Body Frame (bright axes attached to a 3D aircraft model). Uses `OrbitControls` for free camera movement.
-* **Live Mathematical Readouts:** As the user moves the sliders, the application instantly calculates and displays the combined $3 \times 3$ Rotation Matrix.
-* **Point Transformation:** Tracks a local coordinate point $P$ in the body frame and maps its new position in the global world frame using matrix multiplication ($P_{world} = R \cdot P_{body}$).
-* **Matrix Derivation & Properties:** Breaks down the final rotation matrix into its elemental components ($R_x$, $R_y$, $R_z$) and continuously verifies matrix orthogonality and determinant values.
-* **Educational Modes:** * **Demo Mode:** An automated, guided animation that sequentially demonstrates Roll, Pitch, and Yaw.
-  * **Step-by-Step Mode:** Allows the user to manually click through each axis rotation one at a time to understand order-of-operations.
-* **Alternative Representations:** Live calculations for Axis-Angle representations and Quaternions ($q_x, q_y, q_z, q_w$).
+* **Real-Time WebGL Rendering:** Features a fixed global reference frame alongside a dynamic, rotating local body frame. Implements `OrbitControls` for unconstrained viewport manipulation.
+* **Dynamic Matrix Computation:** Instantly calculates and displays the combined $3 \times 3$ rotation matrix as input parameters change.
+* **Point Transformation Engine:** Tracks an arbitrary local coordinate point $P$ in the body frame and maps its transformed position in the global reference frame using matrix multiplication ($P_{world} = R \cdot P_{body}$).
+* **Matrix Verification:** Continuously verifies and displays matrix properties, including determinant calculation ($\det(R) = 1$) and orthogonality checks ($R^T R = I$).
+* **Sequential Analysis Mode:** Includes a step-by-step execution mode that isolates rotation about the X, Y, and Z axes to demonstrate the non-commutative nature of 3D rotations.
+* **Quaternion & Axis-Angle Conversion:** Automatically converts the current rotation matrix into corresponding quaternions ($q_x, q_y, q_z, q_w$) and axis-angle representations.
 
-## 🧮 Mathematical Convention
+---
 
-This tool preserves the classic aerospace **Z-Y-X Intrinsic Euler Angle** convention. 
-* **Roll:** Rotation about the body's X-axis.
-* **Pitch:** Rotation about the new body Y-axis.
-* **Yaw:** Rotation about the final body Z-axis.
+## 🧮 Mathematical Formulation
 
-The resulting rotation matrix $R$ is calculated as:
-$$R = R_z(\text{Yaw}) \cdot R_y(\text{Pitch}) \cdot R_x(\text{Roll})$$
+This application utilizes the standard aerospace **Z-Y-X Intrinsic Euler Angle** convention. 
 
-## 💻 Technologies Used
+Rotations are applied to the body axes in the following sequence:
+1. **Roll ($\phi$):** Rotation about the body X-axis.
+2. **Pitch ($\theta$):** Rotation about the intermediate body Y-axis.
+3. **Yaw ($\psi$):** Rotation about the final body Z-axis.
 
-* **HTML5 & CSS3:** For the structural layout and the "Avionics HUD" engineering aesthetic.
-* **Vanilla JavaScript:** Handles all matrix mathematics, slider events, and UI synchronization without heavy frontend frameworks.
-* **Three.js (r128):** The core WebGL 3D rendering engine used to draw the coordinate frames, grid, and aircraft mesh.
+The resulting composite rotation matrix $R$ is derived by multiplying the elemental rotation matrices:
+$$R = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\phi)$$
 
-## 🚀 How to Run Locally
+---
 
-Because this project is built with native web technologies, no complex build steps, servers, or package managers are required.
+## 💻 Technology Stack
 
-1. Clone the repository:
+* **Frontend:** HTML5, CSS3 (Custom dashboard-style UI architecture)
+* **Logic & Mathematics:** Vanilla JavaScript (ES6+)
+* **3D Rendering Engine:** [Three.js (r128)](https://threejs.org/)
+
+---
+
+## 🚀 Local Installation
+
+This project is built using native web technologies and requires no package managers or local build servers.
+
+1. Clone the repository to your local machine:
    ```bash
    git clone [https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git](https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git)
