@@ -7,7 +7,7 @@ Developed as a technical demonstration for **Introduction to Robotics**, this to
 ### 🔗 Resources
 
 * **Live Application:** [rishabhshahiitgn.github.io/rotation-visualizer](https://rishabhshahiitgn.github.io/rotation-visualizer/)
-* **Video Demonstration:** [Insert YouTube Link Here]
+* **Video Demonstration:** https://youtu.be/QE0hZ7LaZYM
 
 ---
 
