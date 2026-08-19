@@ -5,17 +5,19 @@ An interactive, browser-based visualization tool for rigid body kinematics. This
 Developed as a technical demonstration for **Introduction to Robotics**, this tool bridges the gap between abstract matrix algebra and physical 3D spatial orientation.
 
 ### 🔗 Resources
-* **Live Application:** https://rishabhshahiitgn.github.io/rotation-visualizer/
+
+* **Live Application:** [rishabhshahiitgn.github.io/rotation-visualizer](https://rishabhshahiitgn.github.io/rotation-visualizer/)
 * **Video Demonstration:** [Insert YouTube Link Here]
 
 ---
 
 ## Table of Contents
-1. [Overview](#-Overview)
-2. [Core Features](#-core-features)
-3. [Mathematical Formulation](#-mathematical-formulation)
-4. [Technology Stack](#-technology-stack)
-5. [Local Installation](#-local-installation)
+
+1. [Overview](#overview)
+2. [Core Features](#core-features)
+3. [Mathematical Formulation](#mathematical-formulation)
+4. [Technology Stack](#technology-stack)
+5. [Local Installation](#local-installation)
 
 ---
 
@@ -24,6 +26,7 @@ Developed as a technical demonstration for **Introduction to Robotics**, this to
 In robotics and aerospace engineering, determining the orientation of an end-effector or chassis in 3D space is critical for accurate kinematics, dynamics, and control. This application allows users to manipulate the Roll, Pitch, and Yaw of a rigid body and instantly observe the underlying mathematical transformations.
 
 The application strictly models the progression:
+
 **Euler Angles ➔ 3D Rotation ➔ Rotation Matrix ➔ Coordinate Transformation**
 
 ---
@@ -41,15 +44,23 @@ The application strictly models the progression:
 
 ## Mathematical Formulation
 
-This application utilizes the standard aerospace **Z-Y-X Intrinsic Euler Angle** convention. 
+This application uses the standard aerospace **X-Y-Z Intrinsic Euler Angle** convention, also known as **Roll-Pitch-Yaw**.
 
 Rotations are applied to the body axes in the following sequence:
-1. **Roll ($\phi$):** Rotation about the body X-axis.
-2. **Pitch ($\theta$):** Rotation about the intermediate body Y-axis.
-3. **Yaw ($\psi$):** Rotation about the final body Z-axis.
 
-The resulting composite rotation matrix $R$ is derived by multiplying the elemental rotation matrices:
-$$R = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\phi)$$
+1. **Roll ($\phi$):** Rotation about the body X-axis.
+2. **Pitch ($\theta$):** Rotation about the intermediate (once-rotated) Y-axis.
+3. **Yaw ($\psi$):** Rotation about the final (twice-rotated) Z-axis.
+
+Because each rotation is intrinsic (applied about the body's own, already-rotated axes), the elemental matrices compose by **post-multiplication**, in the same order the rotations are applied:
+
+$$R = R_x(\phi) \cdot R_y(\theta) \cdot R_z(\psi)$$
+
+A point in the body frame is then mapped into the world frame as:
+
+$$P_{world} = R \cdot P_{body}$$
+
+> **Note:** This is equivalent to an *extrinsic* Z-Y-X sequence (rotating about the fixed world axes in Z, then Y, then X order) — the two descriptions produce the identical composite matrix $R$. The app consistently uses the intrinsic X-Y-Z / Roll-Pitch-Yaw framing above throughout its UI and derivation panel.
 
 ---
 
@@ -63,8 +74,26 @@ $$R = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\phi)$$
 
 ## Local Installation
 
-This project is built using native web technologies and requires no package managers or local build servers.
+This project is built using native web technologies and requires no package managers, bundlers, or local build servers.
 
 1. Clone the repository to your local machine:
    ```bash
-   git clone [https://github.com/rishabhshahiitgn/rotation-visualizer.git](https://github.com/rishabhshahiitgn/rotation-visualizer.git)
+   git clone https://github.com/rishabhshahiitgn/rotation-visualizer.git
+   ```
+
+2. Move into the project directory:
+   ```bash
+   cd rotation-visualizer
+   ```
+
+3. Open the app in your browser. Since everything is self-contained in a single HTML file loading Three.js from a CDN, you can simply double-click `index.html` (or open it via `File > Open` in your browser) — no local server is required.
+
+   Optionally, if you'd prefer to serve it locally (e.g. for a consistent `http://` origin):
+   ```bash
+   # Python 3
+   python3 -m http.server 8000
+
+   # or, with Node.js installed
+   npx serve .
+   ```
+   Then visit `http://localhost:8000` (or the port `serve` reports) in your browser.
