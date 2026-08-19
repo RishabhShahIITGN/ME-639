@@ -11,7 +11,7 @@ Developed as a technical demonstration for **Introduction to Robotics**, this to
 ---
 
 ## Table of Contents
-1. [Overview](#-overview)
+1. [Overview](#-Overview)
 2. [Core Features](#-core-features)
 3. [Mathematical Formulation](#-mathematical-formulation)
 4. [Technology Stack](#-technology-stack)
