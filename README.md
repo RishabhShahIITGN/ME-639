@@ -5,7 +5,7 @@ An interactive, browser-based visualization tool for rigid body kinematics. This
 Developed as a technical demonstration for **Introduction to Robotics**, this tool bridges the gap between abstract matrix algebra and physical 3D spatial orientation.
 
 ### 🔗 Resources
-* **Live Application:** [(https://rishabhshahiitgn.github.io/rotation-visualizer/)]
+* **Live Application:** https://rishabhshahiitgn.github.io/rotation-visualizer/
 * **Video Demonstration:** [Insert YouTube Link Here]
 
 ---
