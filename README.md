@@ -1,20 +1,16 @@
 # Interactive 3D Rigid Body Rotation Laboratory
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)]()
-[![WebGL Supported](https://img.shields.io/badge/WebGL-Supported-orange.svg)]()
-
 An interactive, browser-based visualization tool for rigid body kinematics. This application provides real-time rendering of 3D coordinate frame rotations, Euler angle sequences, and their corresponding rotation matrices.
 
 Developed as a technical demonstration for **Introduction to Robotics**, this tool bridges the gap between abstract matrix algebra and physical 3D spatial orientation.
 
 ### 🔗 Resources
-* **Live Application:** [Insert GitHub Pages Link Here]
+* **Live Application:** [(https://rishabhshahiitgn.github.io/rotation-visualizer/)]
 * **Video Demonstration:** [Insert YouTube Link Here]
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 1. [Overview](#-overview)
 2. [Core Features](#-core-features)
 3. [Mathematical Formulation](#-mathematical-formulation)
@@ -23,7 +19,7 @@ Developed as a technical demonstration for **Introduction to Robotics**, this to
 
 ---
 
-## 🎯 Overview
+## Overview
 
 In robotics and aerospace engineering, determining the orientation of an end-effector or chassis in 3D space is critical for accurate kinematics, dynamics, and control. This application allows users to manipulate the Roll, Pitch, and Yaw of a rigid body and instantly observe the underlying mathematical transformations.
 
@@ -32,7 +28,7 @@ The application strictly models the progression:
 
 ---
 
-## ✨ Core Features
+## Core Features
 
 * **Real-Time WebGL Rendering:** Features a fixed global reference frame alongside a dynamic, rotating local body frame. Implements `OrbitControls` for unconstrained viewport manipulation.
 * **Dynamic Matrix Computation:** Instantly calculates and displays the combined $3 \times 3$ rotation matrix as input parameters change.
@@ -43,7 +39,7 @@ The application strictly models the progression:
 
 ---
 
-## 🧮 Mathematical Formulation
+## Mathematical Formulation
 
 This application utilizes the standard aerospace **Z-Y-X Intrinsic Euler Angle** convention. 
 
@@ -57,7 +53,7 @@ $$R = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\phi)$$
 
 ---
 
-## 💻 Technology Stack
+## Technology Stack
 
 * **Frontend:** HTML5, CSS3 (Custom dashboard-style UI architecture)
 * **Logic & Mathematics:** Vanilla JavaScript (ES6+)
@@ -65,10 +61,10 @@ $$R = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\phi)$$
 
 ---
 
-## 🚀 Local Installation
+## Local Installation
 
 This project is built using native web technologies and requires no package managers or local build servers.
 
 1. Clone the repository to your local machine:
    ```bash
-   git clone [https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git](https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git)
+   git clone [https://github.com/rishabhshahiitgn/rotation-visualizer.git](https://github.com/rishabhshahiitgn/rotation-visualizer.git)
