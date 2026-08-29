@@ -7,7 +7,7 @@ import time
 # ==================================================================
 # 1. LOAD THE SKYDIO X2 MODEL
 # ==================================================================
-MODEL_PATH = os.path.join("mujoco_menagerie", "skydio_x2", "scene.xml")
+MODEL_PATH = os.path.join("..","mujoco_menagerie", "skydio_x2", "scene.xml")
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(
         f"Could not find '{MODEL_PATH}'. Run from inside 'mujoco_menagerie/'.")

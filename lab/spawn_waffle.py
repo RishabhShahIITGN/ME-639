@@ -6,7 +6,7 @@ import time
 # ------------------------------------------------------------------
 # Load the robot model
 # ------------------------------------------------------------------
-model = mujoco.MjModel.from_xml_path('robotis_mujoco_menagerie/robotis_tb3/scene_turtlebot3_waffle_pi.xml')
+model = mujoco.MjModel.from_xml_path('../robotis_mujoco_menagerie/robotis_tb3/scene_turtlebot3_waffle_pi.xml')
 data = mujoco.MjData(model)
 
 # ------------------------------------------------------------------
