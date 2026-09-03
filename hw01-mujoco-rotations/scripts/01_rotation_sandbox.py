@@ -18,7 +18,7 @@ the TODOs so that:
      the "Composition of Rotations" lecture derivation.
 
 This is intentionally a plain script, not a GUI app -- editing the
-`rotation_sequence` list below and re-running is a perfectly good
+test-case sequence lists below and re-running is a perfectly good
 "sandbox." A slider UI is a nice-to-have, not a requirement. Use AI
 freely here; document what you asked it for in your AI Use Note.
 """
@@ -28,44 +28,102 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 
-from utils import Rx, Ry, Rz, ELEMENTARY_ROTATIONS, set_body_orientation
+from utils import Rx, Ry, Rz, set_body_orientation
+
+# Configure numpy formatting after all imports
+np.set_printoptions(precision=4, suppress=True)
 
 MODEL_PATH = "../model/asymmetric_body.xml"
+STEP_DELAY = 3.0
+FINAL_PAUSE = 4.0
+RUN_TEST_CASE_A = True
+RUN_TEST_CASE_B = True
 
 
-# ---------------------------------------------------------------
-# TODO(student): edit this sequence to try different experiments.
-# Each entry is (axis, angle_radians, frame) where frame is either
-# "current" (compose on the RIGHT: R_new = R_old @ R_step) or
-# "fixed" (compose on the LEFT: R_new = R_step @ R_old).
-# Compare the two frame choices for the SAME list of (axis, angle).
-# ---------------------------------------------------------------
-rotation_sequence = [
-    ("z", np.deg2rad(90), "current"),   # TODO: try "fixed" here instead
-    ("x", np.deg2rad(90), "current"),   # TODO: try "fixed" here instead
+TEST_CASE_A_SEQUENCE = [
+    {"axis": "x", "angle": np.radians(30), "frame": "fixed"},
+    {"axis": "y", "angle": np.radians(135), "frame": "fixed"},
+    {"axis": "z", "angle": np.radians(-120), "frame": "fixed"},
+]
+
+TEST_CASE_B_FIXED_SEQUENCE = [
+    {"axis": "x", "angle": np.radians(90), "frame": "fixed"},
+    {"axis": "y", "angle": np.radians(90), "frame": "fixed"},
+]
+
+TEST_CASE_B_CURRENT_SEQUENCE = [
+    {"axis": "x", "angle": np.radians(90), "frame": "current"},
+    {"axis": "y", "angle": np.radians(90), "frame": "current"},
 ]
 
 
+def _format_rotation(axis, angle, frame):
+    return f"{np.degrees(angle):.1f} degrees about {frame} {axis.upper()}"
+
+
+def _apply_rotation(R, rotation):
+    axis = rotation["axis"]
+    angle = rotation["angle"]
+    frame = rotation["frame"]
+    rotation_functions = {"x": Rx, "y": Ry, "z": Rz}
+    if axis not in rotation_functions or frame not in ("fixed", "current"):
+        raise ValueError(f"Invalid rotation step: {rotation}")
+
+    R_step = rotation_functions[axis](angle)
+    if frame == "fixed":
+        # Fixed-space axes are outside the current body orientation, so
+        # the new rotation acts on the left.
+        return R_step @ R
+
+    # Current-body axes move with the body, so the new rotation acts inside
+    # the current orientation and is multiplied on the right.
+    return R @ R_step
+
+
 def compose_sequence(sequence):
-    """TODO(student): implement this.
-
-    Given a list of (axis, angle, frame) tuples, return the final
-    3x3 rotation matrix R obtained by applying them in order,
-    starting from R = identity.
-
-    Hint: ELEMENTARY_ROTATIONS["x"](angle) gives you R_x(angle) etc.
-    Hint: think about *why* current-frame composition is a right-
-    multiply and fixed-frame composition is a left-multiply -- this
-    is exactly the "Current Frame" vs. "Fixed Frame" distinction
-    from the Composition-of-Rotations lecture. Don't just guess;
-    check it against your Problem 3/4 reasoning.
-    """
+    """Return the final orientation after applying a rotation sequence."""
     R = np.eye(3)
-    for axis, angle, frame in sequence:
-        R_step = ELEMENTARY_ROTATIONS[axis](angle)
-        # TODO: replace the next line with the correct composition
-        # rule depending on `frame`.
-        raise NotImplementedError("Implement current- vs fixed-frame composition")
+    for step_number, rotation in enumerate(sequence, start=1):
+        R = _apply_rotation(R, rotation)
+        print(
+            f"  Step {step_number}: "
+            f"{_format_rotation(rotation['axis'], rotation['angle'], rotation['frame'])}"
+        )
+        print(R)
+    return R
+
+
+def apply_sequence(model, data, viewer, name, sequence):
+    print(f"\n{name}")
+    print("=" * len(name))
+    
+    print("--- RESETTING TO IDENTITY ---")
+    R = np.eye(3)
+    print("Initial rotation matrix:")
+    print(R)
+    
+    set_body_orientation(data, R)
+# ... (keep the rest the same)
+    mujoco.mj_forward(model, data)
+    viewer.sync()
+    
+    time.sleep(3.0) 
+
+    for step_number, rotation in enumerate(sequence, start=1):
+        R = _apply_rotation(R, rotation)
+        print(
+            f"  Step {step_number}: "
+            f"{_format_rotation(rotation['axis'], rotation['angle'], rotation['frame'])}"
+        )
+        print(R)
+        set_body_orientation(data, R)
+        mujoco.mj_forward(model, data)
+        viewer.sync()
+        time.sleep(STEP_DELAY)
+
+    print("Final rotation matrix:")
+    print(R)
+    time.sleep(FINAL_PAUSE)
     return R
 
 
@@ -73,21 +131,35 @@ def main():
     model = mujoco.MjModel.from_xml_path(MODEL_PATH)
     data = mujoco.MjData(model)
 
-    R_final = compose_sequence(rotation_sequence)
-    set_body_orientation(data, R_final)
-    mujoco.mj_forward(model, data)
-
     with mujoco.viewer.launch_passive(model, data) as viewer:
         print("Viewer open. Close the window to exit.")
-        print(f"Applied sequence: {rotation_sequence}")
+
+        if RUN_TEST_CASE_A:
+            apply_sequence(
+                model, data, viewer, "Test Case A: Problem 3 reference", TEST_CASE_A_SEQUENCE
+            )
+
+        if RUN_TEST_CASE_B and viewer.is_running():
+            R_fixed = apply_sequence(
+                model, data, viewer, "Test Case B, Experiment 1: fixed frame", TEST_CASE_B_FIXED_SEQUENCE
+            )
+            if viewer.is_running():
+                R_current = apply_sequence(
+                    model, data, viewer,
+                    "Test Case B, Experiment 2: current frame",
+                    TEST_CASE_B_CURRENT_SEQUENCE,
+                )
+                print("\nTest Case B comparison")
+                print("Fixed-frame final matrix:")
+                print(R_fixed)
+                print("Current-frame final matrix:")
+                print(R_current)
+                is_different = not np.allclose(R_fixed, R_current)
+                print(f"CONCLUSION: Fixed and Current frame matrices diverge? {is_different}")
+
         while viewer.is_running():
             viewer.sync()
             time.sleep(1 / 60)
-
-    # TODO(student, optional): instead of a static final pose,
-    # animate the sequence step by step (e.g. interpolate each
-    # elemental rotation over ~1 second) so the recording clearly
-    # shows each step happening, not just the end result.
 
 
 if __name__ == "__main__":

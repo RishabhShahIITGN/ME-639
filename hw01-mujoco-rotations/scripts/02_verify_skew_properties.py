@@ -2,25 +2,13 @@
 02_verify_skew_properties.py -- HW1 Part 2, Task 2: verify the
 skew-symmetric identities from Problem 5 in simulation.
 
-STARTER CODE. Model loading and a simple "spin the body" simulation
-loop are provided and working. Your job is to fill in the TODOs to:
+Logs R(t) from a MuJoCo body under time-varying angular velocity and
+numerically checks, for random v, w, omega in R^3:
+    R (v x w) == (R v) x (R w)                 [Problem 5a]
+    R [omega] R^T == [R omega]                 [Problem 5b]
+using utils.hat() for the skew-symmetric (hat) operator.
 
-  1. Log R(t), the body's rotation matrix, at several simulated
-     time steps while it spins.
-  2. At each logged time step, numerically check, for several
-     random v, w, omega in R^3:
-         R (v x w) == (R v) x (R w)                 [Problem 5a]
-         R w^ R^T  == (R w)^                         [Problem 5b, No-AI on paper]
-     using utils.hat() for the ^ operator.
-  3. Print the residual (it should be ~1e-14, machine precision)
-     and explain in your write-up why a small-but-nonzero residual
-     doesn't fully validate the identity, while a residual near
-     machine epsilon strongly supports it.
-
-Note: you already proved these identities by hand in Problem 5.
-This script is not a substitute for that proof -- it's a numerical
-sanity check, and a chance to see *why* proofs and simulation are
-complementary, not interchangeable.
+This is a numerical sanity check, not a substitute for the hand proof.
 """
 
 import numpy as np
@@ -35,56 +23,103 @@ N_LOGGED_STEPS = 5        # how many simulated time points to check
 STEPS_BETWEEN_LOGS = 200  # sim steps to advance between each logged check
 
 
-def random_unit_angular_velocity(rng):
-    """A random constant angular velocity vector (rad/s), used to spin
-    the body between logged checks."""
-    w = rng.normal(size=3)
-    return 2.0 * w / np.linalg.norm(w)
+def skew(omega):
+    """3-vector -> 3x3 skew-symmetric matrix. Same as utils.hat()."""
+    return hat(omega)
+
+
+def time_varying_angular_velocity(t):
+    """Sine-wave angular velocity (rad/s) so omega is not constant."""
+    return np.array([
+        np.sin(t),
+        0.5 * np.sin(2.0 * t),
+        np.cos(0.7 * t),
+    ])
 
 
 def check_identities(R, rng):
-    """TODO(student): implement this.
+    """Numerically check Problem 5 identities at a fixed R.
 
-    For N_CHECKS_PER_STEP random vectors v, w, omega (use rng.normal
-    or rng.uniform), compute the residuals of:
-        R @ np.cross(v, w)  vs.  np.cross(R @ v, R @ w)
-        R @ hat(omega) @ R.T  vs.  hat(R @ omega)
-    and return the worst-case (max) residual across all checks, for
-    each identity separately.
-
-    Return: (max_residual_cross, max_residual_skew)
+    For N_CHECKS_PER_STEP random vectors v, w, omega, compute residuals of:
+        R @ (v x w)  vs.  (R v) x (R w)
+        R @ [omega] @ R.T  vs.  [R omega]
+    Return the worst-case (max) residual for each identity.
     """
-    raise NotImplementedError("Implement the two numerical checks")
+    max_residual_cross = 0.0
+    max_residual_skew = 0.0
+
+    for _ in range(N_CHECKS_PER_STEP):
+        v = rng.normal(size=3)
+        w = rng.normal(size=3)
+        omega = rng.normal(size=3)
+
+        lhs_cross = R @ np.cross(v, w)
+        rhs_cross = np.cross(R @ v, R @ w)
+        resid_cross = np.linalg.norm(lhs_cross - rhs_cross)
+        max_residual_cross = max(max_residual_cross, resid_cross)
+
+        lhs_skew = R @ hat(omega) @ R.T
+        rhs_skew = hat(R @ omega)
+        resid_skew = np.linalg.norm(lhs_skew - rhs_skew)
+        max_residual_skew = max(max_residual_skew, resid_skew)
+
+    return max_residual_cross, max_residual_skew
 
 
 def main():
+    np.set_printoptions(precision=4, suppress=True)
+
     model = mujoco.MjModel.from_xml_path(MODEL_PATH)
     data = mujoco.MjData(model)
     rng = np.random.default_rng(seed=0)
 
-    # Spin the body with a fixed angular velocity by directly setting
-    # qvel's angular part (indices 3:6 for a freejoint) and stepping.
-    data.qvel[3:6] = random_unit_angular_velocity(rng)
     mujoco.mj_forward(model, data)
 
-    print(f"{'step':>5} {'t (s)':>8} {'max resid: R(vxw)=(Rv)x(Rw)':>28} {'max resid: RwR^T=(Rw)^':>24}")
+    logged_R = []
+    global_max_cross = 0.0
+    global_max_skew = 0.0
+
+    print(f"{'step':>5} {'t (s)':>8} {'max resid: R(vxw)=(Rv)x(Rw)':>28} {'max resid: R[w]R^T=[Rw]':>24}")
     for log_i in range(N_LOGGED_STEPS):
         for _ in range(STEPS_BETWEEN_LOGS):
+            data.qvel[3:6] = time_varying_angular_velocity(data.time)
             mujoco.mj_step(model, data)
 
         R = get_body_orientation(data)
-        # Sanity check that R is actually a valid rotation matrix
-        # (this should hold to numerical precision -- if it doesn't,
-        # something upstream is wrong before you even get to the
-        # identities below).
+        logged_R.append(R.copy())
+
+        print(f"\nR(t) at t = {data.time:.4f} s:")
+        print(R)
+
         assert is_close_to_identity(R @ R.T, tol=1e-6), "R is not orthonormal!"
 
         resid_cross, resid_skew = check_identities(R, rng)
+        global_max_cross = max(global_max_cross, resid_cross)
+        global_max_skew = max(global_max_skew, resid_skew)
         print(f"{log_i:5d} {data.time:8.3f} {resid_cross:28.3e} {resid_skew:24.3e}")
 
-    # TODO(student): save these residuals (e.g. to a CSV or a plot)
-    # for your write-up, and answer the "why doesn't a small nonzero
-    # residual fully prove the identity" question from HW1 Problem 8.
+    print("\nMaximum residual across all time steps:")
+    print(f"  Identity 1  R(v x w) = (Rv) x (Rw) : {global_max_cross:.3e}")
+    print(f"  Identity 2  R[ω]R^T = [Rω]         : {global_max_skew:.3e}")
+
+    print(
+        """
+Why this simulation does not prove the identities:
+
+A residual on the order of 1e-16 is consistent with float64 rounding
+error, not with an exact algebraic identity holding in the computer.
+Each multiply/add in forming R, the cross products, and the hat maps
+truncates a real number to a finite mantissa, so the two sides of an
+identity that are equal in SO(3) typically differ by a few units in
+the last place. Checking a handful of random (v, w, omega) at a
+handful of simulated R(t) only samples a finite set of cases; it
+cannot cover every vector in R^3 or every rotation in SO(3). A
+general proof (the paper derivation of Problem 5) is what establishes
+the identities for all R and all vectors. Simulation is a sanity
+check that our implementation matches that algebra within machine
+precision.
+"""
+    )
 
 
 if __name__ == "__main__":
