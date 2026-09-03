@@ -29,8 +29,8 @@ rviz2
 While it's running, try toggling the composition rule live:
 
 ```bash
-ros2 param set /hw01_tf_broadcaster compose_frame fixed
-ros2 param set /hw01_tf_broadcaster compose_frame current
+ros2 param set /hw01_tf_broadcaster composition_mode fixed
+ros2 param set /hw01_tf_broadcaster composition_mode current
 ```
 
 ## What you need to implement
