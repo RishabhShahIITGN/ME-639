@@ -1,26 +1,30 @@
 """
 01_rotation_sandbox.py -- HW1 Part 2, Task 1: does rotation order matter?
 
-STARTER CODE. The model loading, viewer, and simulation loop below
-are complete and working -- run this file as-is and you should see
-the asymmetric dart sitting in the viewer. Your job is to fill in
-the TODOs so that:
+Fill-in complete. This script lets you queue up a sequence of elemental
+rotations (about x, y, or z), where EACH STEP independently chooses to be
+about the current body frame or the fixed space frame. It then:
 
-  1. The user can queue up a sequence of elemental rotations
-     (about x, y, or z), each one EITHER about the current body
-     frame OR about the fixed space frame (their choice).
-  2. The dart's orientation updates to reflect that sequence.
-  3. You can run the SAME sequence of angles twice -- once
-     "current frame" and once "fixed frame" -- and see (and
-     screen-record) that the final orientation is visibly
-     different, exactly as you proved symbolically in HW1
-     Problem 3 (Lynch & Park Ch.3 Ex.3.4-style reasoning) and
-     the "Composition of Rotations" lecture derivation.
+  1. Predicts the final orientation numerically (fast, no viewer) so you
+     can sanity-check against your Problem 3 hand derivation before
+     waiting through the animation.
+  2. Animates the same sequence in the MuJoCo viewer, applying rotations
+     one at a time so you can screen-record the motion.
+  3. Runs three test cases:
+       A: the exact Problem 3 sequence (fixed frame only) as a reference.
+       B: the SAME two rotation angles applied once entirely in the fixed
+          frame and once entirely in the current frame -- final
+          orientations visibly diverge, proving composition order matters.
+       C: a single sequence that MIXES fixed- and current-frame steps,
+          demonstrating the per-step frame choice the assignment asks for.
 
-This is intentionally a plain script, not a GUI app -- editing the
-test-case sequence lists below and re-running is a perfectly good
-"sandbox." A slider UI is a nice-to-have, not a requirement. Use AI
-freely here; document what you asked it for in your AI Use Note.
+This is a plain script, not a GUI app -- editing the test-case sequence
+lists below and re-running is a perfectly good "sandbox." A slider UI is
+a nice-to-have, not a requirement.
+
+Recording tip: record Test Case B's two experiments as two separate clips,
+then place them side by side in your video editor (or screen-record two
+terminal/viewer windows simultaneously) for the "side by side" deliverable.
 """
 
 import time
@@ -30,7 +34,6 @@ import mujoco.viewer
 
 from utils import Rx, Ry, Rz, set_body_orientation
 
-# Configure numpy formatting after all imports
 np.set_printoptions(precision=4, suppress=True)
 
 MODEL_PATH = "../model/asymmetric_body.xml"
@@ -38,7 +41,14 @@ STEP_DELAY = 3.0
 FINAL_PAUSE = 4.0
 RUN_TEST_CASE_A = True
 RUN_TEST_CASE_B = True
+RUN_TEST_CASE_C = True
 
+
+# ---------------------------------------------------------------------------
+# Test-case sequences. Each rotation is a dict: axis in {"x","y","z"},
+# angle in radians, frame in {"fixed","current"}. Edit freely -- this list
+# editing IS the sandbox.
+# ---------------------------------------------------------------------------
 
 TEST_CASE_A_SEQUENCE = [
     {"axis": "x", "angle": np.radians(30), "frame": "fixed"},
@@ -53,6 +63,15 @@ TEST_CASE_B_FIXED_SEQUENCE = [
 
 TEST_CASE_B_CURRENT_SEQUENCE = [
     {"axis": "x", "angle": np.radians(90), "frame": "current"},
+    {"axis": "y", "angle": np.radians(90), "frame": "current"},
+]
+
+# Mixed frame-choice-per-step example: first rotation about the fixed
+# space x-axis, second rotation about whatever the body y-axis has
+# *become* after step 1. This is the general case the assignment
+# describes -- frame is chosen independently at each step.
+TEST_CASE_C_MIXED_SEQUENCE = [
+    {"axis": "x", "angle": np.radians(90), "frame": "fixed"},
     {"axis": "y", "angle": np.radians(90), "frame": "current"},
 ]
 
@@ -75,39 +94,43 @@ def _apply_rotation(R, rotation):
         # the new rotation acts on the left.
         return R_step @ R
 
-    # Current-body axes move with the body, so the new rotation acts inside
-    # the current orientation and is multiplied on the right.
+    # Current-body axes move with the body, so the new rotation acts
+    # inside the current orientation and is multiplied on the right.
     return R @ R_step
 
 
-def compose_sequence(sequence):
-    """Return the final orientation after applying a rotation sequence."""
+def compose_sequence(sequence, verbose=True):
+    """Numerically predict the final orientation, no viewer needed.
+
+    Use this to sanity-check a sequence against your Problem 3 hand
+    derivation before spending time animating it.
+    """
     R = np.eye(3)
     for step_number, rotation in enumerate(sequence, start=1):
         R = _apply_rotation(R, rotation)
-        print(
-            f"  Step {step_number}: "
-            f"{_format_rotation(rotation['axis'], rotation['angle'], rotation['frame'])}"
-        )
-        print(R)
+        if verbose:
+            print(
+                f"  Step {step_number}: "
+                f"{_format_rotation(rotation['axis'], rotation['angle'], rotation['frame'])}"
+            )
+            print(R)
     return R
 
 
 def apply_sequence(model, data, viewer, name, sequence):
+    """Animate a sequence in the MuJoCo viewer, one rotation at a time."""
     print(f"\n{name}")
     print("=" * len(name))
-    
+
     print("--- RESETTING TO IDENTITY ---")
     R = np.eye(3)
     print("Initial rotation matrix:")
     print(R)
-    
+
     set_body_orientation(data, R)
-# ... (keep the rest the same)
     mujoco.mj_forward(model, data)
     viewer.sync()
-    
-    time.sleep(3.0) 
+    time.sleep(3.0)
 
     for step_number, rotation in enumerate(sequence, start=1):
         R = _apply_rotation(R, rotation)
@@ -131,8 +154,22 @@ def main():
     model = mujoco.MjModel.from_xml_path(MODEL_PATH)
     data = mujoco.MjData(model)
 
+    # --- Fast numeric preview of Test Case B before animating anything ---
+    # Confirms the "different frame => different final orientation" claim
+    # mathematically, matching your Problem 3 derivation.
+    print("Numeric preview (no viewer) -- Test Case B")
+    print("-" * 42)
+    print("Fixed-frame sequence:")
+    R_fixed_preview = compose_sequence(TEST_CASE_B_FIXED_SEQUENCE)
+    print("Current-frame sequence:")
+    R_current_preview = compose_sequence(TEST_CASE_B_CURRENT_SEQUENCE)
+    print(
+        "Matrices diverge? "
+        f"{not np.allclose(R_fixed_preview, R_current_preview)}"
+    )
+
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        print("Viewer open. Close the window to exit.")
+        print("\nViewer open. Close the window to exit.")
 
         if RUN_TEST_CASE_A:
             apply_sequence(
@@ -156,6 +193,13 @@ def main():
                 print(R_current)
                 is_different = not np.allclose(R_fixed, R_current)
                 print(f"CONCLUSION: Fixed and Current frame matrices diverge? {is_different}")
+
+        if RUN_TEST_CASE_C and viewer.is_running():
+            apply_sequence(
+                model, data, viewer,
+                "Test Case C: mixed per-step frame choice",
+                TEST_CASE_C_MIXED_SEQUENCE,
+            )
 
         while viewer.is_running():
             viewer.sync()
