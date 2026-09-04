@@ -10,7 +10,53 @@ using utils.hat() for the skew-symmetric (hat) operator.
 
 This is a numerical sanity check, not a substitute for the hand proof.
 """
+import time # Add this at the top of your script
 
+# ... [rest of your code] ...
+
+def main():
+    np.set_printoptions(precision=4, suppress=True)
+
+    model = mujoco.MjModel.from_xml_path(MODEL_PATH)
+    data = mujoco.MjData(model)
+    rng = np.random.default_rng(seed=0)
+
+    mujoco.mj_forward(model, data)
+
+    logged_R = []
+    global_max_cross = 0.0
+    global_max_skew = 0.0
+
+    print(f"{'step':>5} {'t (s)':>8} {'max resid: R(vxw)=(Rv)x(Rw)':>28} {'max resid: R[w]R^T=[Rw]':>24}")
+    
+    # LAUNCH THE VIEWER HERE
+    with mujoco.viewer.launch_passive(model, data) as viewer:
+        for log_i in range(N_LOGGED_STEPS):
+            for _ in range(STEPS_BETWEEN_LOGS):
+                data.qvel[3:6] = time_varying_angular_velocity(data.time)
+                mujoco.mj_step(model, data)
+                
+                # Sync the viewer to see the movement
+                viewer.sync()
+                time.sleep(model.opt.timestep) # Slow it down to real-time
+
+            R = get_body_orientation(data)
+            logged_R.append(R.copy())
+
+            print(f"\nR(t) at t = {data.time:.4f} s:")
+            print(R)
+
+            assert is_close_to_identity(R @ R.T, tol=1e-6), "R is not orthonormal!"
+
+            resid_cross, resid_skew = check_identities(R, rng)
+            global_max_cross = max(global_max_cross, resid_cross)
+            global_max_skew = max(global_max_skew, resid_skew)
+            print(f"{log_i:5d} {data.time:8.3f} {resid_cross:28.3e} {resid_skew:24.3e}")
+            
+            # Pause briefly so you can read the log before it spins again
+            time.sleep(1.0) 
+            
+# ... [rest of the function remains the same] ...
 import numpy as np
 import mujoco
 
