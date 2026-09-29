@@ -3,7 +3,7 @@
 <mujoco model="table_with_panda">
     <!-- Corrected include paths -->
     <include file="arena_description/table_arena.xml" />
-    <include file="robot_description/mjx_panda.xml" />
+    <include file="franka/mjx_panda.xml" />
     <include file="plate_description/model.xml"/>
 
     <worldbody>
