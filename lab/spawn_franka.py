@@ -2,27 +2,16 @@
 spawn_franka.py — Franka Emika Panda (7-DOF) Interactive MuJoCo Simulation
 ===========================================================================
 Features:
+  • Tkinter SLIDER GUI — one slider per joint + gripper, updates in real time
   • PD joint-space controller with gravity compensation
-  • Keyboard control: select joints, nudge ±, open/close gripper
-  • Forward Kinematics: live end-effector position + orientation printed
-  • Jacobian computation + end-effector velocity display
+  • Forward Kinematics: live end-effector position + orientation
+  • Jacobian computation + end-effector velocity
   • Body/world frame axes visualization (arrows drawn in viewer)
+  • Per-link coordinate frame visualization
   • Telemetry HUD overlay (position, orientation, joint angles)
-  • Predefined poses (home, zero, ready) via hotkeys
+  • Predefined poses (home, zero, ready) via GUI buttons
   • Follow-camera mode
   • Sinusoidal demo trajectory mode (toggle on/off)
-
-Controls:
-  Arrow UP / DOWN   →  select previous / next joint
-  Arrow LEFT / RIGHT →  nudge selected joint −/+
-  G / H              →  close / open gripper
-  1                  →  go to HOME pose
-  2                  →  go to ZERO pose
-  3                  →  go to READY pose
-  T                  →  toggle demo trajectory mode
-  F                  →  toggle follow-camera
-  R                  →  reset simulation
-  SPACE              →  hold current joint positions
 
 Usage:
   cd ME-639/lab
@@ -35,6 +24,9 @@ import mujoco.viewer
 import time
 import os
 import numpy as np
+import threading
+import tkinter as tk
+from tkinter import ttk
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -72,16 +64,34 @@ data = mujoco.MjData(model)
 # ═══════════════════════════════════════════════════════════════════
 JOINT_NAMES = [f"joint{i}" for i in range(1, 8)]
 JOINT_IDS = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, n) for n in JOINT_NAMES]
-FINGER_JOINT = "finger_joint1"
 
-# Body IDs for FK
 EE_BODY_NAME = "hand"
 EE_BODY_ID = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, EE_BODY_NAME)
 LINK_BODY_NAMES = [f"link{i}" for i in range(8)] + ["hand"]
 LINK_BODY_IDS = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, n) for n in LINK_BODY_NAMES]
 
-NUM_JOINTS = 7  # arm joints (excludes gripper)
+NUM_JOINTS = 7
 NUM_ACTUATORS = model.nu  # 7 motors + 1 gripper = 8
+
+# Joint limits (from the model)
+JOINT_LIMITS = []
+for jid in JOINT_IDS:
+    if model.jnt_limited[jid]:
+        lo = model.jnt_range[jid, 0]
+        hi = model.jnt_range[jid, 1]
+    else:
+        lo, hi = -3.14, 3.14
+    JOINT_LIMITS.append((lo, hi))
+
+JOINT_LABELS = [
+    "J1 (Base)",
+    "J2 (Shoulder)",
+    "J3 (Elbow 1)",
+    "J4 (Elbow 2)",
+    "J5 (Wrist 1)",
+    "J6 (Wrist 2)",
+    "J7 (Wrist 3)",
+]
 
 print(f"Franka Panda loaded: {NUM_JOINTS} arm joints, {NUM_ACTUATORS} actuators")
 print(f"End-effector body: '{EE_BODY_NAME}' (id={EE_BODY_ID})")
@@ -98,67 +108,183 @@ POSES = {
 # ═══════════════════════════════════════════════════════════════════
 # 4. CONTROLLER PARAMETERS
 # ═══════════════════════════════════════════════════════════════════
-# PD gains (tuned per-joint: heavier proximal joints get higher gains)
 KP = np.array([600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0])
 KD = np.array([50.0,  50.0,  50.0,  50.0,  20.0,  15.0,  5.0])
-
 GRIPPER_OPEN = 0.04
 GRIPPER_CLOSE = 0.0
-JOINT_NUDGE = 0.05  # rad per keypress
 
 # ═══════════════════════════════════════════════════════════════════
-# 5. CONTROLLER STATE
+# 5. SHARED STATE (thread-safe via simple reads/writes on floats)
 # ═══════════════════════════════════════════════════════════════════
 q_target = POSES["home"].copy()
 gripper_target = GRIPPER_OPEN
-selected_joint = 0  # 0..6
 follow_camera = False
 demo_mode = False
+gui_running = True
 last_print_time = 0.0
 PRINT_INTERVAL = 0.5
 
+
 # ═══════════════════════════════════════════════════════════════════
-# 6. KEYBOARD CALLBACK
+# 6. TKINTER SLIDER GUI (runs in a separate thread)
 # ═══════════════════════════════════════════════════════════════════
-def keyboard_callback(keycode):
-    global selected_joint, follow_camera, demo_mode, q_target, gripper_target
+def run_slider_gui():
+    global q_target, gripper_target, follow_camera, demo_mode, gui_running
 
-    if keycode == 265:  # UP arrow — previous joint
-        selected_joint = max(0, selected_joint - 1)
-    elif keycode == 264:  # DOWN arrow — next joint
-        selected_joint = min(NUM_JOINTS - 1, selected_joint + 1)
-    elif keycode == 263:  # LEFT arrow — nudge joint negative
-        q_target[selected_joint] -= JOINT_NUDGE
-    elif keycode == 262:  # RIGHT arrow — nudge joint positive
-        q_target[selected_joint] += JOINT_NUDGE
+    root = tk.Tk()
+    root.title("Franka Panda — Joint Control Panel")
+    root.geometry("480x750")
+    root.configure(bg="#2b2b2b")
+    root.protocol("WM_DELETE_WINDOW", lambda: on_close(root))
 
-    elif keycode in (71, 103):  # G — close gripper
-        gripper_target = GRIPPER_CLOSE
-    elif keycode in (72, 104):  # H — open gripper
-        gripper_target = GRIPPER_OPEN
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure("TScale", background="#2b2b2b")
+    style.configure("TLabel", background="#2b2b2b", foreground="#e0e0e0",
+                    font=("Consolas", 10))
+    style.configure("TButton", font=("Consolas", 10))
+    style.configure("Header.TLabel", font=("Consolas", 14, "bold"),
+                    foreground="#4fc3f7")
 
-    elif keycode in (49,):  # 1 — home pose
-        q_target = POSES["home"].copy()
-        demo_mode = False
-    elif keycode in (50,):  # 2 — zero pose
-        q_target = POSES["zero"].copy()
-        demo_mode = False
-    elif keycode in (51,):  # 3 — ready pose
-        q_target = POSES["ready"].copy()
-        demo_mode = False
+    ttk.Label(root, text="Franka Panda (7-DOF)", style="Header.TLabel").pack(pady=8)
 
-    elif keycode in (84, 116):  # T — toggle trajectory demo
-        demo_mode = not demo_mode
-    elif keycode in (70, 102):  # F — toggle follow camera
-        follow_camera = not follow_camera
-    elif keycode in (82, 114):  # R — reset
-        mujoco.mj_resetData(model, data)
-        q_target[:] = POSES["home"]
-        gripper_target = GRIPPER_OPEN
+    # --- Joint sliders ---
+    slider_vars = []
+    slider_widgets = []
+    angle_labels = []
+
+    joint_frame = ttk.Frame(root)
+    joint_frame.pack(fill="x", padx=10)
+
+    for i in range(NUM_JOINTS):
+        lo_deg = np.degrees(JOINT_LIMITS[i][0])
+        hi_deg = np.degrees(JOINT_LIMITS[i][1])
+        cur_deg = np.degrees(q_target[i])
+
+        frame = ttk.Frame(joint_frame)
+        frame.pack(fill="x", pady=2)
+
+        ttk.Label(frame, text=f"{JOINT_LABELS[i]}:", width=16, anchor="w").pack(side="left")
+
+        var = tk.DoubleVar(value=cur_deg)
+        slider_vars.append(var)
+
+        s = ttk.Scale(frame, from_=lo_deg, to=hi_deg, orient="horizontal",
+                      variable=var, length=220)
+        s.pack(side="left", padx=5)
+        slider_widgets.append(s)
+
+        lbl = ttk.Label(frame, text=f"{cur_deg:+7.1f}°", width=9)
+        lbl.pack(side="left")
+        angle_labels.append(lbl)
+
+    # --- Gripper slider ---
+    grip_frame = ttk.Frame(joint_frame)
+    grip_frame.pack(fill="x", pady=2)
+    ttk.Label(grip_frame, text="Gripper:", width=16, anchor="w").pack(side="left")
+
+    grip_var = tk.DoubleVar(value=GRIPPER_OPEN * 1000)
+    grip_slider = ttk.Scale(grip_frame, from_=0, to=40, orient="horizontal",
+                            variable=grip_var, length=220)
+    grip_slider.pack(side="left", padx=5)
+    grip_label = ttk.Label(grip_frame, text=f"{GRIPPER_OPEN*1000:.0f} mm", width=9)
+    grip_label.pack(side="left")
+
+    # --- FK display ---
+    ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=8)
+    ttk.Label(root, text="Forward Kinematics", style="Header.TLabel").pack()
+
+    fk_pos_var = tk.StringVar(value="EE Pos: (---, ---, ---)")
+    fk_rpy_var = tk.StringVar(value="EE RPY: (---, ---, ---)")
+    fk_vel_var = tk.StringVar(value="EE |v|: --- m/s")
+
+    ttk.Label(root, textvariable=fk_pos_var).pack(anchor="w", padx=15)
+    ttk.Label(root, textvariable=fk_rpy_var).pack(anchor="w", padx=15)
+    ttk.Label(root, textvariable=fk_vel_var).pack(anchor="w", padx=15)
+
+    # --- Buttons ---
+    ttk.Separator(root, orient="horizontal").pack(fill="x", padx=10, pady=8)
+    btn_frame = ttk.Frame(root)
+    btn_frame.pack(fill="x", padx=10)
+
+    def set_pose(name):
+        nonlocal slider_vars, grip_var
+        global demo_mode
         demo_mode = False
-    elif keycode == 32:  # SPACE — hold current position
-        q_target[:] = data.qpos[:NUM_JOINTS]
-        demo_mode = False
+        pose = POSES[name]
+        for i in range(NUM_JOINTS):
+            slider_vars[i].set(np.degrees(pose[i]))
+
+    ttk.Button(btn_frame, text="🏠 Home", command=lambda: set_pose("home")).pack(side="left", padx=4, expand=True, fill="x")
+    ttk.Button(btn_frame, text="0️⃣ Zero", command=lambda: set_pose("zero")).pack(side="left", padx=4, expand=True, fill="x")
+    ttk.Button(btn_frame, text="✋ Ready", command=lambda: set_pose("ready")).pack(side="left", padx=4, expand=True, fill="x")
+
+    btn_frame2 = ttk.Frame(root)
+    btn_frame2.pack(fill="x", padx=10, pady=5)
+
+    demo_var = tk.BooleanVar(value=False)
+    follow_var = tk.BooleanVar(value=False)
+
+    def toggle_demo():
+        global demo_mode
+        demo_mode = demo_var.get()
+
+    def toggle_follow():
+        global follow_camera
+        follow_camera = follow_var.get()
+
+    ttk.Checkbutton(btn_frame2, text="Demo Trajectory", variable=demo_var,
+                    command=toggle_demo).pack(side="left", padx=10)
+    ttk.Checkbutton(btn_frame2, text="Follow Camera", variable=follow_var,
+                    command=toggle_follow).pack(side="left", padx=10)
+
+    # --- Periodic update loop ---
+    def update():
+        global q_target, gripper_target
+        if not gui_running:
+            root.destroy()
+            return
+
+        # Read slider values → update targets
+        if not demo_mode:
+            for i in range(NUM_JOINTS):
+                q_target[i] = np.radians(slider_vars[i].get())
+        else:
+            # In demo mode, update sliders from q_target
+            for i in range(NUM_JOINTS):
+                slider_vars[i].set(np.degrees(q_target[i]))
+
+        gripper_target = grip_var.get() / 1000.0
+
+        # Update angle labels
+        for i in range(NUM_JOINTS):
+            angle_labels[i].config(text=f"{slider_vars[i].get():+7.1f}°")
+        grip_label.config(text=f"{grip_var.get():.0f} mm")
+
+        # Update FK display
+        try:
+            ee_pos = data.xpos[EE_BODY_ID]
+            ee_rot = data.xmat[EE_BODY_ID].reshape(3, 3)
+            roll, pitch, yaw = rotation_matrix_to_euler(ee_rot)
+            fk_pos_var.set(f"EE Pos: ({ee_pos[0]:+.3f}, {ee_pos[1]:+.3f}, {ee_pos[2]:+.3f})")
+            fk_rpy_var.set(f"EE RPY: ({np.degrees(roll):+.1f}°, {np.degrees(pitch):+.1f}°, {np.degrees(yaw):+.1f}°)")
+
+            jacp = np.zeros((3, model.nv))
+            jacr = np.zeros((3, model.nv))
+            mujoco.mj_jacBody(model, data, jacp, jacr, EE_BODY_ID)
+            ee_vel = jacp @ data.qvel
+            fk_vel_var.set(f"EE |v|: {np.linalg.norm(ee_vel):.4f} m/s")
+        except Exception:
+            pass
+
+        root.after(33, update)  # ~30 Hz GUI refresh
+
+    def on_close(r):
+        global gui_running
+        gui_running = False
+
+    root.after(100, update)
+    root.mainloop()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -209,42 +335,26 @@ def draw_label(scn, pos, text):
 
 
 def rotation_matrix_to_euler(R):
-    """Extract roll, pitch, yaw from a 3x3 rotation matrix."""
     roll = np.arctan2(R[2, 1], R[2, 2])
     pitch = np.arctan2(-R[2, 0], np.sqrt(R[2, 1]**2 + R[2, 2]**2))
     yaw = np.arctan2(R[1, 0], R[0, 0])
     return roll, pitch, yaw
 
 
-def compute_jacobian(model, data, body_id):
-    """Compute the full 6xN Jacobian for a body (position + orientation rows)."""
-    nv = model.nv
-    jacp = np.zeros((3, nv))
-    jacr = np.zeros((3, nv))
-    mujoco.mj_jacBody(model, data, jacp, jacr, body_id)
-    return jacp, jacr
-
-
 # ═══════════════════════════════════════════════════════════════════
-# 8. GRAVITY COMPENSATION
+# 8. LAUNCH GUI IN SEPARATE THREAD
 # ═══════════════════════════════════════════════════════════════════
-def gravity_compensation(model, data):
-    """Return the bias forces (gravity + Coriolis) for the arm joints."""
-    return data.qfrc_bias[:NUM_JOINTS].copy()
-
+gui_thread = threading.Thread(target=run_slider_gui, daemon=True)
+gui_thread.start()
 
 # ═══════════════════════════════════════════════════════════════════
 # 9. MAIN SIMULATION LOOP
 # ═══════════════════════════════════════════════════════════════════
-CONTROLS_TEXT = (
-    "UP/DOWN=joint  LEFT/RIGHT=nudge  G/H=grip  "
-    "1=home 2=zero 3=ready  T=demo  F=cam  R=reset  SPACE=hold"
-)
+print("\nSlider GUI launched in a separate window!")
+print("Drag sliders to control joints. Use buttons for preset poses.\n")
 
-print(f"\n{CONTROLS_TEXT}\n")
-
-with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) as viewer:
-    while viewer.is_running():
+with mujoco.viewer.launch_passive(model, data) as viewer:
+    while viewer.is_running() and gui_running:
         step_start = time.time()
         t = data.time
 
@@ -256,43 +366,44 @@ with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) a
             q_target[5] = POSES["home"][5] + 0.5 * np.sin(0.7 * t + 2.0)
 
         # --- PD control with gravity compensation ---
-        grav_comp = gravity_compensation(model, data)
+        grav_comp = data.qfrc_bias[:NUM_JOINTS].copy()
         for i in range(NUM_JOINTS):
             error = q_target[i] - data.qpos[i]
             error_dot = -data.qvel[i]
             data.ctrl[i] = KP[i] * error + KD[i] * error_dot + grav_comp[i]
 
-        # Gripper control (actuator index 7)
+        # Gripper
         if NUM_ACTUATORS > NUM_JOINTS:
             data.ctrl[NUM_JOINTS] = gripper_target
 
         # --- Step physics ---
         mujoco.mj_step(model, data)
 
-        # --- Forward Kinematics ---
+        # --- FK ---
         ee_pos = data.xpos[EE_BODY_ID].copy()
         ee_rot = data.xmat[EE_BODY_ID].reshape(3, 3).copy()
         roll, pitch, yaw = rotation_matrix_to_euler(ee_rot)
 
         # --- Jacobian & EE velocity ---
-        jacp, jacr = compute_jacobian(model, data, EE_BODY_ID)
+        jacp = np.zeros((3, model.nv))
+        jacr = np.zeros((3, model.nv))
+        mujoco.mj_jacBody(model, data, jacp, jacr, EE_BODY_ID)
         ee_lin_vel = jacp @ data.qvel
-        ee_ang_vel = jacr @ data.qvel
 
         # --- Visualization ---
         viewer.user_scn.ngeom = 0
 
-        # Draw end-effector body frame
+        # End-effector frame
         for axis_name, axis_vec in AXES:
             draw_arrow(viewer.user_scn, ee_pos, ee_rot @ axis_vec,
                        BODY_AXIS_LEN, BODY_AXIS_WIDTH, BODY_COLORS[axis_name])
 
-        # Draw world frame at origin
+        # World frame
         for axis_name, axis_vec in AXES:
             draw_arrow(viewer.user_scn, np.zeros(3), axis_vec,
                        WORLD_AXIS_LEN, WORLD_AXIS_WIDTH, WORLD_COLORS[axis_name])
 
-        # Draw axes on each link
+        # Per-link frames
         for bid in LINK_BODY_IDS:
             if bid < 0:
                 continue
@@ -310,8 +421,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) a
             f"EE rpy: ({np.degrees(roll):+.1f}, {np.degrees(pitch):+.1f}, {np.degrees(yaw):+.1f}) deg",
             f"EE vel: ({ee_lin_vel[0]:+.3f}, {ee_lin_vel[1]:+.3f}, {ee_lin_vel[2]:+.3f}) m/s",
             f"Joints: [{', '.join(f'{a:+.1f}' for a in q_deg)}] deg",
-            f"Selected: joint{selected_joint+1} | {'DEMO' if demo_mode else 'MANUAL'}",
-            CONTROLS_TEXT,
+            f"Mode: {'DEMO' if demo_mode else 'SLIDER CONTROL'}",
         ]
         for i, text in enumerate(lines):
             draw_label(viewer.user_scn,
@@ -322,7 +432,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) a
         if follow_camera:
             viewer.cam.lookat[:] = ee_pos
             viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-        
+
         viewer.sync()
 
         # --- Terminal output ---
@@ -333,7 +443,7 @@ with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) a
                 f"EE=({ee_pos[0]:+.3f},{ee_pos[1]:+.3f},{ee_pos[2]:+.3f}) | "
                 f"RPY=({np.degrees(roll):+.1f},{np.degrees(pitch):+.1f},{np.degrees(yaw):+.1f})° | "
                 f"q={np.round(q_deg, 1)} | "
-                f"|v_ee|={np.linalg.norm(ee_lin_vel):.3f} m/s | "
+                f"|v|={np.linalg.norm(ee_lin_vel):.3f} m/s | "
                 f"grip={'CLOSED' if gripper_target < 0.01 else 'OPEN'}"
             )
             last_print_time = now
@@ -343,3 +453,6 @@ with mujoco.viewer.launch_passive(model, data, key_callback=keyboard_callback) a
         sleep_time = model.opt.timestep - elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
+
+gui_running = False
+print("Simulation ended.")
