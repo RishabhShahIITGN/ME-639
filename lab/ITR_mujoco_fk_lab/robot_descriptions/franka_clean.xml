@@ -1,0 +1,23 @@
+<mujoco model="franka_clean">
+    <option gravity="0 0 -9.81" />
+    
+    <compiler angle="radian" autolimits="true"/>
+
+    <asset>
+        <texture builtin="gradient" height="256" rgb1=".9 .9 1." rgb2=".2 .3 .4" type="skybox" width="256"/>
+        <texture builtin="checker" height="512" name="texplane" rgb1="0.2 0.3 0.4" rgb2="0.1 0.15 0.2" type="2d" width="512"/>
+        <material name="floorplane" reflectance="0.3" shininess="0.0" specular="0.3" texrepeat="5 5" texture="texplane" texuniform="true"/>
+    </asset>
+
+    <!-- Robot model -->
+    <include file="franka/mjx_panda.xml" />
+
+    <worldbody>
+        <!-- Floor -->
+        <geom condim="3" group="1" material="floorplane" name="floor" pos="0 0 0" size="3 3 .01" type="plane"/>
+
+        <!-- Lighting -->
+        <light pos="0 0 3" dir="0 0 -1" directional="true" castshadow="true"/>
+        <light pos="1 1 2" dir="-0.2 -0.2 -1" specular="0.3 0.3 0.3" directional="false"/>
+    </worldbody>
+</mujoco>

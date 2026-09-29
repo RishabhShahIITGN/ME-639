@@ -52,7 +52,7 @@ def setup_working_directory():
 
 setup_working_directory()
 
-MODEL_PATH = "franka_scene.xml"
+MODEL_PATH = "franka_clean.xml"
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Could not find '{MODEL_PATH}'.")
 
