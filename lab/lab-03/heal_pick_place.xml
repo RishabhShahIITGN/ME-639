@@ -1,0 +1,21 @@
+<mujoco model="heal_pick_place">
+    <!-- Include table arena -->
+    <include file="../ITR_mujoco_fk_lab/robot_descriptions/arena_description/table_arena.xml" />
+    
+    <!-- Include HEAL robot -->
+    <include file="../ITR_mujoco_fk_lab/robot_descriptions/single_arm_heal_effort_actuation_rs.xml" />
+    
+    <worldbody>
+        <!-- Add a red cube to be picked up -->
+        <!-- Placed on the table at Z=0.83 (table top is Z=0.8, cube half-size is 0.03) -->
+        <body name="box" pos="0.3 0.2 0.83">
+            <joint name="cube" type="free"/>
+            <geom type="box" name="box_geom" size="0.03 0.03 0.03"
+                  condim="3" friction="1 0.5 0.5" rgba="1 0 0 1"
+                  contype="2" conaffinity="1" mass="0.1"/>
+        </body>
+
+        <!-- Optional: A target location for placing the cube -->
+        <site name="place_target" pos="0.3 -0.2 0.801" type="box" size="0.05 0.05 0.001" rgba="0 1 0 0.5"/>
+    </worldbody>
+</mujoco>
