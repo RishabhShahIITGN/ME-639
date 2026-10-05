@@ -1,0 +1,25 @@
+{
+  "table_height_m": 0.2,
+  "table_thickness_m": 0.04,
+  "table_x_min_m": 0.24,
+  "table_x_max_m": 0.58,
+  "table_y_min_m": -0.3,
+  "table_y_max_m": 0.3,
+  "table_length_x_m": 0.34,
+  "table_width_y_m": 0.6,
+  "table_center_xy_m": [
+    0.41,
+    0.0
+  ],
+  "approach_band_z_m": [
+    0.26,
+    0.56
+  ],
+  "gripper_length_m": 0.16,
+  "lift_clearance_m": 0.1,
+  "base_keep_out_m": 0.18,
+  "justification": {
+    "height": "Surface at z=0.20 m puts downward TCP grasps near z=0.36 m, inside the high-manipulability core of the reachable sphere (not the z\u22480.8 m rim). The band [0.26, 0.56] m covers the 2F-85 length (0.16 m) plus 0.10 m lift.",
+    "footprint": "Rectangle 0.34\u00d70.60 m in +X covers the dexterous occupancy (arbitrary yaw) with a 0.03 m inset and 0.18 m clearance from the base."
+  }
+}
