@@ -50,3 +50,16 @@ python3 scripts/env_pick_place.py
 # Headless sanity check with fixed seed
 python3 scripts/env_pick_place.py --no-gui --seed 42
 ```
+
+## 8) Episode generation and randomization
+
+To run multi-episode data collection and logging:
+```bash
+cd lab/lab-03
+source ../../venv/bin/activate
+python3 scripts/run_episodes.py --episodes 10 --steps 200
+```
+- A loop iterates over `N` episodes using `mujoco.mj_resetData`.
+- The cube pose is sampled inside the designed table surface on the pick side (+Y).
+- Samples $x \in [X_{min}, X_{max}]$, $y \in [Y_{min}, Y_{max}]$, and $yaw \in [-\pi, \pi]$ using uniform randomization.
+- Logs cube position, cube quaternion, end-effector position, and time at each step into `.npz` files in `lab/lab-03/logs/`.
