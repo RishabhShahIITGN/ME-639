@@ -28,3 +28,25 @@ cd lab/lab-03
 source ../../venv/bin/activate
 python3 table_design.py
 ```
+
+## 7) Environment setup
+
+Full pick-and-place scene built programmatically via MjSpec in `scripts/env_pick_place.py`.
+
+| Component | Description |
+|---|---|
+| **Robot** | HEAL 6-DOF arm (`single_arm_heal_effort_actuation_rs_mj.xml`) with Robotiq 2F-85 gripper attached at the `right_center` site via `MjSpec.attach()` |
+| **Table** | 0.34 × 0.60 m surface at z = 0.20 m, centered at (0.41, 0.00) m — from Task 6 (`table_design.json`) |
+| **Pick cube** | 5 cm red cube (80 g, free joint) spawned at a random position on the +Y half of the table each run |
+| **Placement tray** | 12 × 12 cm green tray with 1.5 cm raised walls on the −Y half of the table, centered at (0.41, −0.12) m |
+| **Gravity comp** | `qfrc_bias` feedforward on the 6 arm motors; gripper actuator is left free for explicit control |
+
+```bash
+# Launch interactive viewer (cube position randomized each run)
+cd lab/lab-03
+source ../../venv/bin/activate
+python3 scripts/env_pick_place.py
+
+# Headless sanity check with fixed seed
+python3 scripts/env_pick_place.py --no-gui --seed 42
+```
