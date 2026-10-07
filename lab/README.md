@@ -5,7 +5,7 @@
 - `spawn_waffle.py` — spawn the Waffle robot in MuJoCo.
 - `spawn_quadrotor.py` — spawn the quadrotor in MuJoCo.
 
-**Video demonstration:** [Lab 01 — Waffle and quadrotor MuJoCo simulations](https://youtu.be/5-cM8qot2qo?si=QACPg403qRGEix1p)
+<b>Video demonstration:</b> <a href="https://youtu.be/5-cM8qot2qo?si=QACPg403qRGEix1p" target="_blank" rel="noopener noreferrer">Lab 01 — Waffle and quadrotor MuJoCo simulations</a>
 
 ### Run and operate the Waffle simulation
 
