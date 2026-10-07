@@ -58,6 +58,8 @@ The viewer displays body-frame axes (solid red X, green Y, blue Z), world-frame 
 - `spawn_heal.py` — spawn the HEAL robot in MuJoCo.
 - `spawn_franka.py` — spawn the Franka robot in MuJoCo.
 
+**Video demonstration:** [Lab 02 — HEAL and Franka MuJoCo simulations](https://youtu.be/GwFLrIUo620?si=YbysZpMFHA-QoY82)
+
 ### Run and operate the HEAL simulation
 
 From the repository root, activate the project virtual environment, then run the script from the `lab` directory:
