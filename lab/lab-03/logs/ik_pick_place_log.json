@@ -1,0 +1,347 @@
+[
+  {
+    "success": true,
+    "reason": "success",
+    "cube_start": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "cube_end": [
+      0.41596917735235467,
+      -0.12217196677090228,
+      0.22892759782990538
+    ],
+    "phases": {
+      "APPROACH": {
+        "ok": true,
+        "converged": "True",
+        "iters": 415,
+        "pos_err": 1.3424673075400535e-06,
+        "collisions": [],
+        "time": 0.3097386360168457
+      },
+      "DESCEND": {
+        "ok": true,
+        "converged": "True",
+        "iters": 316,
+        "pos_err": 4.4354600630200235e-05,
+        "collisions": [],
+        "time": 0.1940617561340332
+      },
+      "GRASP": {
+        "ok": true,
+        "time": 0.11126899719238281
+      },
+      "LIFT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 1.810075685896659e-06,
+        "collisions": [],
+        "time": 0.45087432861328125
+      },
+      "TRANSIT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 806,
+        "pos_err": 7.28797032729699e-07,
+        "collisions": [],
+        "time": 0.9433169364929199
+      },
+      "LOWER": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 4.620486306668298e-06,
+        "collisions": [],
+        "time": 0.6010503768920898
+      },
+      "RELEASE": {
+        "ok": "True",
+        "converged": "True",
+        "iters": 316,
+        "err": 1.8864876851077608e-06,
+        "time": 0.3557727336883545
+      }
+    },
+    "episode": 0,
+    "seed": 191664964
+  },
+  {
+    "success": true,
+    "reason": "success",
+    "cube_start": [
+      0.3949778468763953,
+      0.21022911352917875,
+      0.23
+    ],
+    "cube_end": [
+      0.4160609237850731,
+      -0.12299005433570323,
+      0.22892759782990546
+    ],
+    "phases": {
+      "APPROACH": {
+        "ok": true,
+        "converged": "True",
+        "iters": 715,
+        "pos_err": 9.490263829504381e-07,
+        "collisions": [],
+        "time": 0.5053050518035889
+      },
+      "DESCEND": {
+        "ok": true,
+        "converged": "True",
+        "iters": 316,
+        "pos_err": 4.29443541817835e-05,
+        "collisions": [],
+        "time": 0.19422578811645508
+      },
+      "GRASP": {
+        "ok": true,
+        "time": 0.12146830558776855
+      },
+      "LIFT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 1.992971563001903e-06,
+        "collisions": [],
+        "time": 0.503986120223999
+      },
+      "TRANSIT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 1101,
+        "pos_err": 5.316885836056926e-07,
+        "collisions": [],
+        "time": 1.1707184314727783
+      },
+      "LOWER": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 4.61999105231865e-06,
+        "collisions": [],
+        "time": 0.46068358421325684
+      },
+      "RELEASE": {
+        "ok": "True",
+        "converged": "True",
+        "iters": 316,
+        "err": 1.8864912032413616e-06,
+        "time": 0.27382636070251465
+      }
+    },
+    "episode": 1,
+    "seed": 1662057958
+  },
+  {
+    "success": true,
+    "reason": "success",
+    "cube_start": [
+      0.5265616685247282,
+      0.1097366038703459,
+      0.23
+    ],
+    "cube_end": [
+      0.4158845871609924,
+      -0.12222776450305187,
+      0.2289275978299054
+    ],
+    "phases": {
+      "APPROACH": {
+        "ok": true,
+        "converged": "True",
+        "iters": 630,
+        "pos_err": 2.399980158951767e-06,
+        "collisions": [],
+        "time": 0.3987281322479248
+      },
+      "DESCEND": {
+        "ok": true,
+        "converged": "True",
+        "iters": 316,
+        "pos_err": 4.194196820224965e-05,
+        "collisions": [],
+        "time": 0.22090506553649902
+      },
+      "GRASP": {
+        "ok": true,
+        "time": 0.12226748466491699
+      },
+      "LIFT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 3.0794134686784817e-06,
+        "collisions": [],
+        "time": 0.5755584239959717
+      },
+      "TRANSIT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 858,
+        "pos_err": 4.0738760191717556e-07,
+        "collisions": [],
+        "time": 1.1328270435333252
+      },
+      "LOWER": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 4.620265887582601e-06,
+        "collisions": [],
+        "time": 0.8222997188568115
+      },
+      "RELEASE": {
+        "ok": "True",
+        "converged": "True",
+        "iters": 316,
+        "err": 1.8864948811707413e-06,
+        "time": 0.47991394996643066
+      }
+    },
+    "episode": 2,
+    "seed": 1405681632
+  },
+  {
+    "success": true,
+    "reason": "success",
+    "cube_start": [
+      0.38498219426811453,
+      0.08668776573853376,
+      0.23
+    ],
+    "cube_end": [
+      0.41583902119678856,
+      -0.12195790774519766,
+      0.22892759782990543
+    ],
+    "phases": {
+      "APPROACH": {
+        "ok": true,
+        "converged": "True",
+        "iters": 317,
+        "pos_err": 1.1623637428222033e-06,
+        "collisions": [],
+        "time": 0.20810961723327637
+      },
+      "DESCEND": {
+        "ok": true,
+        "converged": "True",
+        "iters": 316,
+        "pos_err": 4.3781201595292346e-05,
+        "collisions": [],
+        "time": 0.2527487277984619
+      },
+      "GRASP": {
+        "ok": true,
+        "time": 0.16829967498779297
+      },
+      "LIFT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 1.8631668819541776e-06,
+        "collisions": [],
+        "time": 0.5715811252593994
+      },
+      "TRANSIT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 693,
+        "pos_err": 5.734020017273408e-07,
+        "collisions": [],
+        "time": 0.9976110458374023
+      },
+      "LOWER": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 4.620220432777458e-06,
+        "collisions": [],
+        "time": 0.643237829208374
+      },
+      "RELEASE": {
+        "ok": "True",
+        "converged": "True",
+        "iters": 316,
+        "err": 1.8864894709508476e-06,
+        "time": 0.3692164421081543
+      }
+    },
+    "episode": 3,
+    "seed": 942484272
+  },
+  {
+    "success": true,
+    "reason": "success",
+    "cube_start": [
+      0.3364135450586521,
+      0.05392453351777154,
+      0.23
+    ],
+    "cube_end": [
+      0.4158123260694948,
+      -0.12163112657821762,
+      0.22892759782990538
+    ],
+    "phases": {
+      "APPROACH": {
+        "ok": true,
+        "converged": "True",
+        "iters": 260,
+        "pos_err": 2.149574705318025e-06,
+        "collisions": [],
+        "time": 0.1415846347808838
+      },
+      "DESCEND": {
+        "ok": true,
+        "converged": "True",
+        "iters": 316,
+        "pos_err": 4.4452121955757275e-05,
+        "collisions": [],
+        "time": 0.17785334587097168
+      },
+      "GRASP": {
+        "ok": true,
+        "time": 0.12758493423461914
+      },
+      "LIFT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 1.7993873187546401e-06,
+        "collisions": [],
+        "time": 0.471355676651001
+      },
+      "TRANSIT": {
+        "ok": true,
+        "converged": "True",
+        "iters": 629,
+        "pos_err": 7.838209288740893e-07,
+        "collisions": [],
+        "time": 0.5584902763366699
+      },
+      "LOWER": {
+        "ok": true,
+        "converged": "True",
+        "iters": 416,
+        "pos_err": 4.620035316323879e-06,
+        "collisions": [],
+        "time": 0.5286922454833984
+      },
+      "RELEASE": {
+        "ok": "True",
+        "converged": "True",
+        "iters": 316,
+        "err": 1.8864882047854736e-06,
+        "time": 0.3106698989868164
+      }
+    },
+    "episode": 4,
+    "seed": 929893138
+  }
+]

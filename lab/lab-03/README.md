@@ -63,3 +63,37 @@ python3 scripts/run_episodes.py --episodes 10 --steps 200
 - The cube pose is sampled inside the designed table surface on the pick side (+Y).
 - Samples $x \in [X_{min}, X_{max}]$, $y \in [Y_{min}, Y_{max}]$, and $yaw \in [-\pi, \pi]$ using uniform randomization.
 - Logs cube position, cube quaternion, end-effector position, and time at each step into `.npz` files in `lab/lab-03/logs/`.
+
+## 9) IK Phase 1: Off‑the‑shelf IK (Mink)
+
+Differential IK pipeline using [Mink](https://github.com/kevinzakka/mink) for end-effector trajectory planning combined with joint-space PD control and collision avoidance.
+
+### Execution Phases:
+1. **APPROACH**: Pre-grasp pose directly above randomized cube position ($z = \text{table\_h} + 0.12\text{m} + \text{offset}$).
+2. **DESCEND**: Lower end-effector to grasp height ($z = \text{table\_h} + 0.025\text{m} + \text{offset}$).
+3. **GRASP**: Close 2F-85 gripper fingers around cube.
+4. **LIFT**: Retract vertically to lift height ($z = \text{table\_h} + 0.15\text{m} + \text{offset}$).
+5. **TRANSIT**: Transfer end-effector to the tray target site on the $-Y$ table section.
+6. **LOWER**: Lower cube into target tray.
+7. **RELEASE**: Open gripper, drop object into tray, and retreat upward.
+
+### Collision Avoidance & Safety:
+- Implements `mink.CollisionAvoidanceLimit` between arm links/gripper pads and the table/tray surfaces.
+- Step-by-step collision inspection between arm/gripper base and furniture.
+
+### Usage:
+```bash
+cd lab/lab-03
+source ../../venv/bin/activate
+
+# Interactive viewer (run a single pick-and-place episode)
+python3 scripts/ik_pick_place.py
+
+# Run batch test headless (e.g., 5 episodes)
+python3 scripts/ik_pick_place.py --episodes 5 --no-gui
+
+# Deterministic seed test
+python3 scripts/ik_pick_place.py --episodes 1 --seed 42 --no-gui
+```
+Detailed execution logs and per-phase stats are saved to `lab/lab-03/logs/ik_pick_place_log.json`.
+
