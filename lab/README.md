@@ -56,6 +56,57 @@ The viewer displays body-frame axes (solid red X, green Y, blue Z), world-frame 
 - `spawn_heal.py` — spawn the HEAL robot in MuJoCo.
 - `spawn_franka.py` — spawn the Franka robot in MuJoCo.
 
+### Run and operate the HEAL simulation
+
+From the repository root, activate the project virtual environment, then run the script from the `lab` directory:
+
+```bash
+cd lab
+source ../venv/bin/activate
+python3 spawn_heal.py
+```
+
+The script opens the MuJoCo viewer and a separate Tkinter control window. It starts with the arm targeting the **Home** pose. Use the six joint sliders to change the target angles; the displayed limits are specific to the robot model.
+
+| Control | Action |
+|---|---|
+| Joint sliders | Set the six joint target angles in degrees |
+| **Home** | Move to the predefined home pose |
+| **Zero** | Target zero angle for all joints |
+| **Stretch** | Move to the predefined stretch pose |
+| **Demo Trajectory** | Toggle the built-in time-varying joint motion |
+| **Follow Camera** | Keep the viewer camera centered on the end-effector |
+
+The arm uses a PD joint controller with gravity compensation. The Tkinter panel compares analytical forward kinematics with MuJoCo's simulated end-effector pose and reports position error (mm), orientation error (degrees), end-effector pose, TCP position, and end-effector speed from the Jacobian. In the 3D viewer, colored arrows show body and world coordinate axes, a yellow marker shows the analytical FK position, and a floating HUD displays the pose and FK errors. Similar telemetry is also printed periodically in the terminal.
+
+Keep both windows open while operating the simulation. Close the Tkinter control window or the MuJoCo viewer to end the simulation. The script requires a graphical desktop session for both windows.
+
+### Run and operate the Franka Panda simulation
+
+From the repository root, activate the project virtual environment, then launch the script from the `lab` directory:
+
+```bash
+cd lab
+source ../venv/bin/activate
+python3 spawn_franka.py
+```
+
+The simulation opens a MuJoCo viewer and a separate Tkinter control window. The arm starts targeting its **Home** pose with the gripper open. Use the seven joint sliders to set joint targets in degrees and the gripper slider to adjust its opening (0–40 mm).
+
+| Control | Action |
+|---|---|
+| Joint sliders | Set target angles for the seven arm joints |
+| Gripper slider | Adjust the gripper opening from 0 to 40 mm |
+| **Home** | Move to the predefined home pose |
+| **Zero** | Target zero angle for all seven joints |
+| **Ready** | Move to the predefined ready pose |
+| **Demo Trajectory** | Toggle the built-in time-varying joint motion |
+| **Follow Camera** | Keep the viewer camera centered on the end-effector |
+
+The arm uses a PD joint controller with gravity compensation. The gripper is controlled independently by its slider. The Tkinter panel compares analytical forward kinematics with MuJoCo's simulated end-effector pose and displays position error (mm), orientation error (degrees), end-effector pose, and end-effector speed computed from the Jacobian. In the 3D viewer, colored arrows show body and world coordinate axes, a yellow marker indicates the analytical FK position, and a floating HUD shows pose and FK diagnostics. Periodic pose and error telemetry is also printed in the terminal.
+
+Keep both windows open while operating the simulation. Close the Tkinter control window or the MuJoCo viewer to end the simulation. The script requires a graphical desktop session for both windows.
+
 ## Lab 03
 
 See the [`lab-03/`](lab-03/) folder for the Lab 03 materials, documentation, and implementation.
