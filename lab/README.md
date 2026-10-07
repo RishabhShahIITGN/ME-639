@@ -5,6 +5,8 @@
 - `spawn_waffle.py` — spawn the Waffle robot in MuJoCo.
 - `spawn_quadrotor.py` — spawn the quadrotor in MuJoCo.
 
+**Video demonstration:** [Lab 01 — Waffle and quadrotor MuJoCo simulations](https://youtu.be/5-cM8qot2qo?si=QACPg403qRGEix1p)
+
 ### Run and operate the Waffle simulation
 
 From the repository root, activate the project virtual environment and launch the script from the `lab` directory. Running it from `lab` is important because the model path in the script is relative to the current working directory.
