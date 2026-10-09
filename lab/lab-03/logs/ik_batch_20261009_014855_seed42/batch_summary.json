@@ -1,0 +1,10 @@
+{
+  "episodes": 1,
+  "successes": 1,
+  "success_rate": 1.0,
+  "mean_time_to_solve_s": 8.373359512999741,
+  "total_ik_iterations": 2571,
+  "minimum_clearance_m": 0.0004603207727777777,
+  "seed": 42,
+  "batch_directory": "/home/rishabh/ME-639/lab/lab-03/logs/ik_batch_20261009_014855_seed42"
+}

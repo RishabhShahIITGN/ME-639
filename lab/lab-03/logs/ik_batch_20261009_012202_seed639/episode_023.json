@@ -1,0 +1,70 @@
+{
+  "success": false,
+  "reason": "collision: gripper-table [table_top <-> geom28] (phase=GRASP)",
+  "failure_code": "collision",
+  "failure_phase": "GRASP",
+  "cube_start": [
+    0.46696895610346634,
+    0.24183194049264317,
+    0.23
+  ],
+  "cube_end": [
+    0.46911537460746877,
+    0.2422797028411717,
+    0.22458327582106896
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.46696895610346634,
+      0.24183194049264317,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": 4.433232559386546e-06,
+  "phases": {
+    "APPROACH": {
+      "ok": true,
+      "converged": true,
+      "steps": 869,
+      "pos_err": 0.0033340324520520653,
+      "collisions": [],
+      "time": 2.3344674110412598
+    },
+    "DESCEND": {
+      "ok": true,
+      "converged": true,
+      "steps": 319,
+      "pos_err": 0.004626333574808852,
+      "collisions": [],
+      "time": 0.9080381393432617
+    },
+    "GRASP": {
+      "ok": false,
+      "pad_forces_N": {
+        "L": 37.576169930721754,
+        "R": 36.78655897409913
+      },
+      "collisions": [
+        "gripper-table [table_top <-> geom28]"
+      ],
+      "time": 0.12339067459106445
+    }
+  },
+  "placement": null,
+  "minimum_clearance": {
+    "distance_m": -9.097481752678992e-05,
+    "geom_pair": "geom26 <-> table_top",
+    "phase": "GRASP",
+    "samples": 1191
+  },
+  "time_to_solve_s": 3.4333949470019434,
+  "ik_iterations": 1188,
+  "episode": 22,
+  "seed": 733494430
+}

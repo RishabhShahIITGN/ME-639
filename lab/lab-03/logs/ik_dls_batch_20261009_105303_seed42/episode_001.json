@@ -1,0 +1,55 @@
+{
+  "success": false,
+  "reason": "ik_diverged: EE position error 0.0140 m (phase=APPROACH)",
+  "failure_code": "ik_diverged",
+  "failure_phase": "APPROACH",
+  "cube_start": [
+    0.3340694802550638,
+    0.10987360348624559,
+    0.23
+  ],
+  "cube_end": [
+    0.3340694802392136,
+    0.10987348817268655,
+    0.2249275978299054
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": 1.0547600903798582e-08,
+  "phases": {
+    "APPROACH": {
+      "ok": false,
+      "converged": false,
+      "steps": 565,
+      "pos_err": 0.01403327158823659,
+      "planning_time_s": 0.046038156999657076,
+      "collisions": [],
+      "time": 1.4780473709106445,
+      "failure": "ik_diverged: EE position error 0.0140 m (phase=APPROACH)"
+    }
+  },
+  "placement": null,
+  "solver": "dls",
+  "minimum_clearance": {
+    "distance_m": 0.05634171847957667,
+    "geom_pair": "geom26 <-> cube_geom",
+    "phase": "APPROACH",
+    "samples": 566
+  },
+  "time_to_solve_s": 1.6933190660001856,
+  "planning_time_s": 0.046038156999657076,
+  "ik_iterations": 565,
+  "episode": 0,
+  "seed": 191664964
+}
