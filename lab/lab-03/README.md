@@ -1,10 +1,10 @@
 # Lab 03 — HEAL pick and place
 
-## 5) Workspace analysis
+## Workspace analysis
 
 Task workspace (reachable, gripper pointing down) and dexterous workspace (arbitrary yaw) are computed in `scripts/workspace_task.py` and `table_design.py`. Occupancy maps: `table_design_occupancy.png`.
 
-## 6) Table design
+## Table design
 
 Chosen from the occupancy maps (not the default 1.2 m × 1.2 m, 0.80 m robosuite table, which sits on the workspace rim and overlaps the base).
 
@@ -29,7 +29,7 @@ source ../../venv/bin/activate
 python3 table_design.py
 ```
 
-## 7) Environment setup
+## Environment setup
 
 Full pick-and-place scene built programmatically via MjSpec in `scripts/env_pick_place.py`.
 
@@ -51,7 +51,7 @@ python3 scripts/env_pick_place.py
 python3 scripts/env_pick_place.py --no-gui --seed 42
 ```
 
-## 8) Episode generation and randomization
+## Episode generation and randomization
 
 To run multi-episode data collection and logging:
 ```bash
@@ -64,7 +64,7 @@ python3 scripts/run_episodes.py --episodes 10 --steps 200
 - Samples $x \in [X_{min}, X_{max}]$, $y \in [Y_{min}, Y_{max}]$, and $yaw \in [-\pi, \pi]$ using uniform randomization.
 - Logs cube position, cube quaternion, end-effector position, and time at each step into `.npz` files in `lab/lab-03/logs/`.
 
-## 9) IK Phase 1: Off‑the‑shelf IK (Mink)
+## IK Phase 1: Off‑the‑shelf IK (Mink)
 
 Differential IK pipeline using [Mink](https://github.com/kevinzakka/mink) for end-effector trajectory planning combined with joint-space PD control and collision avoidance.
 
@@ -97,7 +97,7 @@ python3 scripts/ik_pick_place.py --episodes 1 --seed 42 --no-gui
 ```
 Detailed execution logs and per-phase stats are saved to `lab/lab-03/logs/ik_pick_place_log.json`.
 
-## 10) Batch demonstrations
+## Batch demonstrations
 
 Run a headless batch of at least 25 randomized pick-and-place episodes:
 
@@ -109,7 +109,7 @@ python3 scripts/ik_pick_place.py --episodes 25 --seed 42 --no-gui
 
 Each run creates a timestamped folder under `logs/ik_batch_<timestamp>_seed<seed>/` containing one JSON file per episode, a resumable `episodes.json`, and `batch_summary.json`. Episode logs include the initial cube position and quaternion, success or failure reason, minimum signed clearance and closest geometry pair, Mink IK solver time (`planning_time_s`), full episode wall-clock time (`time_to_solve_s`), IK iteration count, and per-phase details. The batch summary reports the mean IK planning time separately from mean episode wall time. The aggregate `logs/ik_pick_place_log.json` is also refreshed for compatibility.
 
-## 11) Custom IK methods (run separately)
+## Custom IK methods (run separately)
 
 Damped Least Squares and a joint-limit QP are **separate scripts**, so you can batch whichever method you want without the other.
 
