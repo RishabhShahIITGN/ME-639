@@ -1,0 +1,72 @@
+{
+  "success": false,
+  "reason": "grasp_failed: no two-sided pad contact on cube (F_left=0.00 N, F_right=0.00 N, need >= 1.0 N each) (phase=GRASP)",
+  "failure_code": "grasp_failed",
+  "failure_phase": "GRASP",
+  "cube_start": [
+    0.3340694802550638,
+    0.10987360348624559,
+    0.23
+  ],
+  "cube_end": [
+    0.33406948023921507,
+    0.10987348817268706,
+    0.22492759782990543
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": 1.0547600903798582e-08,
+  "phases": {
+    "APPROACH": {
+      "ok": true,
+      "converged": true,
+      "steps": 415,
+      "pos_err": 0.0033672633321452147,
+      "planning_time_s": 0.2648437080424628,
+      "collisions": [],
+      "time": 16.793395042419434
+    },
+    "DESCEND": {
+      "ok": true,
+      "converged": true,
+      "steps": 180,
+      "pos_err": 0.0032134183877889767,
+      "planning_time_s": 0.11326076502155047,
+      "collisions": [],
+      "time": 7.186644554138184
+    },
+    "GRASP": {
+      "ok": false,
+      "pad_forces_N": {
+        "L": 0.0,
+        "R": 0.0
+      },
+      "collisions": [],
+      "time": 7.349044561386108
+    }
+  },
+  "placement": null,
+  "minimum_clearance": {
+    "distance_m": 0.054740193035940236,
+    "geom_pair": "geom37 <-> cube_geom",
+    "phase": "APPROACH",
+    "samples": 598
+  },
+  "solver": "mink",
+  "time_to_solve_s": 35.73249140899861,
+  "planning_time_s": 0.3781044730640133,
+  "ik_iterations": 595,
+  "episode": 0,
+  "seed": 191664964
+}

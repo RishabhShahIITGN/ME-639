@@ -1,0 +1,12 @@
+{
+  "solver": "qp",
+  "episodes": 250,
+  "successes": 250,
+  "success_rate": 1.0,
+  "mean_ik_planning_time_s": 0.5851240194039856,
+  "mean_episode_wall_time_s": 9.151001165188019,
+  "total_ik_iterations": 713302,
+  "minimum_clearance_m": 0.001572724091421501,
+  "seed": 19,
+  "batch_directory": "/home/rishabh/ME-639/lab/lab-03/logs/ik_qp_batch_20261011_235407_seed19"
+}

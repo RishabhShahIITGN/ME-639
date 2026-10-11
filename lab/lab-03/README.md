@@ -120,9 +120,14 @@ source ../../venv/bin/activate
 # DLS only
 python3 scripts/ik_dls_pick_place.py --episodes 25 --seed 42 --no-gui
 
+# One DLS episode, with a reproducible batch seed
+python3 scripts/ik_dls_pick_place.py --episodes 1 --seed 42 --no-gui
+
 # QP with joint limits only
 python3 scripts/ik_qp_pick_place.py --episodes 25 --seed 42 --no-gui
 ```
+
+`--seed` initializes the batch's random-number generator; the runner derives and prints a separate cube-spawn seed for each episode. Re-running with the same batch seed and episode count reproduces the same episode sequence. To reproduce episode N in that sequence, rerun with the same batch seed and `--episodes N` (the runner executes episodes 1 through N). The CLI does not currently accept a per-episode seed directly.
 
 Logs go to `logs/ik_dls_batch_<timestamp>_seed<seed>/` and `logs/ik_qp_batch_<timestamp>_seed<seed>/` respectively (plus `logs/ik_dls_pick_place_log.json` / `logs/ik_qp_pick_place_log.json`). The 7-phase pick-and-place loop is shared; only the per-step velocity IK solver differs.
 
