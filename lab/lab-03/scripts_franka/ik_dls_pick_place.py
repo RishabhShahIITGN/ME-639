@@ -30,18 +30,50 @@ from ik_custom_core import (  # noqa: E402
     make_run_episode,
     pack_arm_velocity,
 )
-from ik_pick_place import IK_DT, run_batch  # noqa: E402
+from ik_pick_place import EE_SITE, IK_DT, run_batch  # noqa: E402
 
 
-def solve_ik_dls(model, data, target_pos, target_quat, site_name="right_center", damping=1e-2):
-    """One DLS IK step on the 6 arm DoFs. Returns a full-nv joint velocity."""
+Q_DEFAULT_FRANKA = np.array([0.0, -np.pi / 4, 0.0, -3 * np.pi / 4, 0.0, np.pi / 2, np.pi / 4])
+
+
+def solve_ik_dls(
+    model,
+    data,
+    target_pos,
+    target_quat,
+    site_name=EE_SITE,
+    damping=1e-2,
+    k_null: float = 3.0,
+    q_default: np.ndarray | None = None,
+):
+    """One DLS IK step on the 7 Franka arm DoFs with null-space posture projection.
+
+    Returns a full-nv joint velocity.
+    """
     dofs = arm_dof_indices(model)
+    n = len(dofs)
     J = get_ee_jacobian(model, data, site_name)[:, dofs]
     # Scale pose error by 1/dt so integrating dq * dt closes the error this step.
     err = compute_error(model, data, target_pos, target_quat, site_name) / IK_DT
     lambda_sq = damping ** 2
-    A = J.T @ J + lambda_sq * np.eye(len(dofs))
-    dq_arm = np.linalg.solve(A, J.T @ err)
+
+    # DLS pseudo-inverse J_pinv = (J^T J + lambda^2 I)^-1 J^T
+    A = J.T @ J + lambda_sq * np.eye(n)
+    J_pinv = np.linalg.solve(A, J.T)
+    dq_task = J_pinv @ err
+
+    # Null-space projection: N = I - J_pinv @ J
+    # Secondary task: pull joints toward resting posture q_default
+    if q_default is None:
+        q_default = Q_DEFAULT_FRANKA if n == 7 else np.zeros(n)
+
+    # Current arm joint angles
+    q_arm = np.array([data.qpos[model.jnt_qposadr[int(model.actuator_trnid[aid][0])]]
+                      for aid in range(len(dofs))]) if model.nu >= len(dofs) else data.qpos[:n]
+    dq_null = k_null * (q_default[:n] - q_arm[:n])
+    N = np.eye(n) - J_pinv @ J
+    dq_arm = dq_task + N @ dq_null
+
     return pack_arm_velocity(model, dq_arm)
 
 

@@ -92,7 +92,7 @@ def compute_error(model, data, target_pos, target_quat, site_name=EE_SITE):
 
 
 def arm_dof_indices(model: mujoco.MjModel) -> np.ndarray:
-    """Velocity indices of the 6 HEAL arm actuators (exclude cube / fingers)."""
+    """Velocity indices of the 7 Franka arm actuators (exclude cube / fingers)."""
     dofs = []
     for name in ARM_ACTUATORS:
         aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)

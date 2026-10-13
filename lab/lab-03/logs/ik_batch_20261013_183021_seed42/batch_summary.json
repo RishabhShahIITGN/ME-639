@@ -1,0 +1,12 @@
+{
+  "solver": "mink",
+  "episodes": 1,
+  "successes": 0,
+  "success_rate": 0.0,
+  "mean_ik_planning_time_s": 0.02505381296214182,
+  "mean_episode_wall_time_s": 3.1699807879995205,
+  "total_ik_iterations": 57,
+  "minimum_clearance_m": -0.005174395839872475,
+  "seed": 42,
+  "batch_directory": "/home/rishabh/ME-639/lab/lab-03/logs/ik_batch_20261013_183021_seed42"
+}

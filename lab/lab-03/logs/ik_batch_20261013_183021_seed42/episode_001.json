@@ -1,0 +1,58 @@
+{
+  "success": false,
+  "reason": "collision: gripper-table [table_top <-> geom67] (phase=APPROACH)",
+  "failure_code": "collision",
+  "failure_phase": "APPROACH",
+  "cube_start": [
+    0.3340694802550638,
+    0.10987360348624559,
+    0.23
+  ],
+  "cube_end": [
+    0.33406948026537214,
+    0.10987369679301108,
+    0.2249927136209815
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": -9.553471650824985e-05,
+  "phases": {
+    "APPROACH": {
+      "ok": false,
+      "converged": false,
+      "steps": 57,
+      "pos_err": 0.3684715373550627,
+      "planning_time_s": 0.02505381296214182,
+      "collisions": [
+        "gripper-table [table_top <-> geom67]",
+        "gripper-table [table_top <-> geom72]"
+      ],
+      "time": 2.7999579906463623,
+      "failure": "collision: gripper-table [table_top <-> geom67] (phase=APPROACH)"
+    }
+  },
+  "placement": null,
+  "minimum_clearance": {
+    "distance_m": -0.005174395839872475,
+    "geom_pair": "geom66 <-> table_top",
+    "phase": "APPROACH",
+    "samples": 58
+  },
+  "solver": "mink",
+  "time_to_solve_s": 3.1699807879995205,
+  "planning_time_s": 0.02505381296214182,
+  "ik_iterations": 57,
+  "episode": 0,
+  "seed": 191664964
+}

@@ -79,7 +79,7 @@ POS_TOL = 0.005           # 5 mm position convergence (measured on the real arm)
 GRIPPER_OPEN_CMD = 0.0
 GRIPPER_CLOSE_CMD = 255.0
 
-EE_SITE = "right_center"
+EE_SITE = "attachment_site"
 GRIPPER_OFFSET = 0.14     # Gripper pads are ~14 cm below EE site
 PRE_GRASP_HEIGHT = 0.12   # pad height above surface for pre-grasp
 CUBE_HALF = 0.025
@@ -107,8 +107,11 @@ FREEZE_COST = 100.0
 # Geometry names (from the Task-7 model)
 PAD_GEOMS = ("gripper/left_pad1", "gripper/left_pad2",
              "gripper/right_pad1", "gripper/right_pad2")
-ARM_COLLISION_GEOMS = ("link_2_collision", "link_3_collision", "link_4_collision",
-                       "link_5_collision", "end_effector_collision")
+ARM_COLLISION_GEOMS = (
+    "link1_collision", "link2_collision", "link3_collision",
+    "link4_collision", "link5_c0_collision", "link5_c1_collision",
+    "link5_c2_collision", "link6_collision", "link7_collision",
+)
 TABLE_GEOMS = ("table_top",)
 TRAY_FLOOR_GEOM = "tray_floor"
 TRAY_WALL_GEOMS = ("tray_wall_px", "tray_wall_mx", "tray_wall_py", "tray_wall_my")
@@ -209,7 +212,7 @@ def build_roles(model: mujoco.MjModel) -> list[str]:
             role = "tray_floor"
         elif gn in TRAY_WALL_GEOMS or gn.startswith("tray_wall"):
             role = "tray_wall"
-        elif re.fullmatch(r"link_[1-5]", bn) or bn == "end_effector":
+        elif re.fullmatch(r"link[0-7]", bn) or bn in ("link0", "link1", "link2", "link3", "link4", "link5", "link6", "link7", "attachment"):
             role = "arm"
         else:
             role = "other"

@@ -39,7 +39,7 @@ HERE = Path(__file__).resolve().parent          # lab-03/scripts/
 LAB  = HERE.parent                              # lab-03/
 DESC = LAB.parent / "ITR_mujoco_fk_lab" / "robot_descriptions"
 
-ARM_XML  = DESC / "single_arm_heal_effort_actuation_rs_mj.xml"
+ARM_XML  = LAB.parent.parent / "mujoco_menagerie" / "franka_emika_panda" / "panda_nohand.xml"
 GRIP_XML = DESC / "robotiq_2f85_v4" / "2f85.xml"
 DESIGN   = LAB / "table_design.json"
 
@@ -94,12 +94,39 @@ def build_model(seed: int | None = None) -> tuple[mujoco.MjModel, mujoco.MjData]
     # ---- 1. Robot + gripper via MjSpec attach ----
     arm  = mujoco.MjSpec.from_file(str(ARM_XML))
     grip = mujoco.MjSpec.from_file(str(GRIP_XML))
-    arm.attach(grip, prefix="gripper/", site=arm.site("right_center"))
+    arm.attach(grip, prefix="gripper/", site=arm.site("attachment_site"))
+
+    # Convert arm actuators to pure motor actuators so PD control can apply torque directly
+    for a in arm.actuators:
+        if not a.name.startswith("gripper/"):
+            a.biastype = mujoco.mjtBias.mjBIAS_NONE
+            a.biasprm = np.zeros(10)
+            a.gaintype = mujoco.mjtGain.mjGAIN_FIXED
+            prm = np.zeros(10)
+            prm[0] = 1.0
+            a.gainprm = prm
+            a.ctrlrange = np.array([-1000.0, 1000.0])
+            a.forcerange = np.array([-1000.0, 1000.0])
+
+    # Explicitly name collision geoms on the Franka links so Scene can look them up
+    for b in arm.bodies:
+        for g in b.geoms:
+            if g.meshname and ("_c" in g.meshname or g.meshname.endswith("_c")):
+                g.name = f"{b.name}_collision" if not g.meshname.startswith("link5_c") else f"{b.name}_{g.meshname[-2:]}_collision"
 
     wb = arm.worldbody
 
-    # The base HEAL XML already defines a floor geom and one light,
-    # so we only add a secondary fill light here.
+    # Add lighting and floor if not present
+    wb.add_geom(
+        name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.05],
+        rgba=[0.2, 0.2, 0.2, 1.0],
+    )
+    wb.add_light(
+        name="main_light",
+        type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL,
+        pos=[0, 0, 3], dir=[0, 0, -1],
+        diffuse=[0.8, 0.8, 0.8],
+    )
     wb.add_light(
         name="fill_light",
         type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL,
@@ -217,13 +244,16 @@ def gravity_comp(model: mujoco.MjModel, data: mujoco.MjData,
 # Main
 # ---------------------------------------------------------------------------
 
-ARM_ACTUATORS = ["turret", "shoulder", "elbow", "wrist_1", "wrist_2", "wrist_3"]
+ARM_ACTUATORS = [
+    "actuator1", "actuator2", "actuator3", "actuator4",
+    "actuator5", "actuator6", "actuator7"
+]
 
 
 def print_scene_info(model: mujoco.MjModel, data: mujoco.MjData):
     """Print a summary of the loaded scene for verification."""
     print("\n" + "=" * 60)
-    print("  HEAL Pick-and-Place Environment  —  Task 7")
+    print("  Franka Emika Panda Pick-and-Place Environment")
     print("=" * 60)
     print(f"  Bodies       : {model.nbody}")
     print(f"  Joints       : {model.njnt}")

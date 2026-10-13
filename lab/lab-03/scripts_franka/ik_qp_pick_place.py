@@ -34,16 +34,18 @@ from ik_custom_core import (  # noqa: E402
     make_run_episode,
     pack_arm_velocity,
 )
-from ik_pick_place import IK_DT, run_batch  # noqa: E402
+from ik_pick_place import EE_SITE, IK_DT, run_batch  # noqa: E402
 
 
-def solve_ik_qp(model, data, target_pos, target_quat, site_name="right_center", damping=1e-2):
-    """One QP IK step with box joint-limit constraints on the 6 arm DoFs."""
+def solve_ik_qp(model, data, target_pos, target_quat, site_name=EE_SITE, damping=1e-2):
+    """One QP IK step with box joint-limit constraints on the 7 Franka arm DoFs."""
     dofs = arm_dof_indices(model)
     J = get_ee_jacobian(model, data, site_name)[:, dofs]
     err = compute_error(model, data, target_pos, target_quat, site_name) / IK_DT
     n = len(dofs)
 
+    # Ensure strictly positive definite Hessian for 7-DoF redundant arm:
+    # P = J.T @ J + damping^2 * I_n
     P = J.T @ J + (damping ** 2) * np.eye(n)
     q = -J.T @ err
 
