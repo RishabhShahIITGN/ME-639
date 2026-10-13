@@ -1,0 +1,57 @@
+{
+  "success": false,
+  "reason": "collision: pad-cube (unintended) [gripper/left_pad2 <-> cube_geom] (phase=APPROACH)",
+  "failure_code": "collision",
+  "failure_phase": "APPROACH",
+  "cube_start": [
+    0.3340694802550638,
+    0.10987360348624559,
+    0.23
+  ],
+  "cube_end": [
+    0.3255334303558742,
+    0.10767040172994985,
+    0.22524896421092813
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": -9.553471650736167e-05,
+  "phases": {
+    "APPROACH": {
+      "ok": false,
+      "converged": false,
+      "steps": 447,
+      "pos_err": 0.29874294163806486,
+      "planning_time_s": 0.13317148193891626,
+      "collisions": [
+        "pad-cube (unintended) [gripper/left_pad2 <-> cube_geom]"
+      ],
+      "time": 32.14270639419556,
+      "failure": "collision: pad-cube (unintended) [gripper/left_pad2 <-> cube_geom] (phase=APPROACH)"
+    }
+  },
+  "placement": null,
+  "solver": "dls",
+  "minimum_clearance": {
+    "distance_m": -0.0005267183376414781,
+    "geom_pair": "gripper/left_pad2 <-> cube_geom",
+    "phase": "APPROACH",
+    "samples": 448
+  },
+  "time_to_solve_s": 36.91748754100263,
+  "planning_time_s": 0.13317148193891626,
+  "ik_iterations": 447,
+  "episode": 0,
+  "seed": 191664964
+}

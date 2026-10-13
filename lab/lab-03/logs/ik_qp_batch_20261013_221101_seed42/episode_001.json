@@ -1,0 +1,58 @@
+{
+  "success": false,
+  "reason": "collision: gripper-table [table_top <-> geom73], gripper-table [table_top <-> geom84], pad-table [gripper/left_pad2 <-> table_top], pad-table [gripper/right_pad1 <-> table_top], pad-table [gripper/right_pad2 <-> table_top] (phase=APPROACH)",
+  "failure_code": "collision",
+  "failure_phase": "APPROACH",
+  "cube_start": [
+    0.3340694802550638,
+    0.10987360348624559,
+    0.23
+  ],
+  "cube_end": [
+    -0.1209738335283634,
+    0.7062791513731441,
+    0.40546330689651516
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.3340694802550638,
+      0.10987360348624559,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": -9.553471650736167e-05,
+  "phases": {
+    "APPROACH": {
+      "ok": false,
+      "converged": false,
+      "steps": 468,
+      "pos_err": 0.38374700730266936,
+      "planning_time_s": 0.2900556649401551,
+      "collisions": [
+        "gripper-table [table_top <-> geom84]",
+        "pad-table [gripper/right_pad2 <-> table_top]"
+      ],
+      "time": 49.759400844573975,
+      "failure": "collision: gripper-table [table_top <-> geom73], gripper-table [table_top <-> geom84], pad-table [gripper/left_pad2 <-> table_top], pad-table [gripper/right_pad1 <-> table_top], pad-table [gripper/right_pad2 <-> table_top] (phase=APPROACH)"
+    }
+  },
+  "placement": null,
+  "solver": "qp",
+  "minimum_clearance": {
+    "distance_m": -0.02124607859664071,
+    "geom_pair": "geom82 <-> table_top",
+    "phase": "APPROACH",
+    "samples": 469
+  },
+  "time_to_solve_s": 54.49877935800032,
+  "planning_time_s": 0.2900556649401551,
+  "ik_iterations": 468,
+  "episode": 0,
+  "seed": 191664964
+}

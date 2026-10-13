@@ -103,6 +103,18 @@ def arm_dof_indices(model: mujoco.MjModel) -> np.ndarray:
     return np.asarray(dofs, dtype=int)
 
 
+def arm_qpos_indices(model: mujoco.MjModel) -> np.ndarray:
+    """Position indices corresponding to the Franka arm actuators."""
+    qpos = []
+    for name in ARM_ACTUATORS:
+        aid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+        if aid < 0:
+            continue
+        jnt = int(model.actuator_trnid[aid][0])
+        qpos.append(int(model.jnt_qposadr[jnt]))
+    return np.asarray(qpos, dtype=int)
+
+
 def pack_arm_velocity(model: mujoco.MjModel, dq_arm: np.ndarray) -> np.ndarray:
     dq = np.zeros(model.nv)
     dq[arm_dof_indices(model)] = dq_arm
@@ -244,6 +256,10 @@ def make_run_episode(solve_ik: SolveIK, solver_name: str):
 
     def run_episode(seed: int | None = None, gui: bool = False, verbose: bool = True) -> dict:
         model, data = build_model(seed=seed)
+        if model.nkey > 0:
+            data.qpos[:7] = model.key_qpos[0, :7]
+        else:
+            data.qpos[:7] = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
         mujoco.mj_forward(model, data)
 
         result: dict = {

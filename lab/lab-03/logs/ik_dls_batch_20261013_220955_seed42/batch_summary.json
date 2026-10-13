@@ -1,0 +1,12 @@
+{
+  "solver": "dls",
+  "episodes": 1,
+  "successes": 0,
+  "success_rate": 0.0,
+  "mean_ik_planning_time_s": 0.15283243009616854,
+  "mean_episode_wall_time_s": 42.12248303399974,
+  "total_ik_iterations": 447,
+  "minimum_clearance_m": -0.0005267183376414781,
+  "seed": 42,
+  "batch_directory": "/home/rishabh/ME-639/lab/lab-03/logs/ik_dls_batch_20261013_220955_seed42"
+}

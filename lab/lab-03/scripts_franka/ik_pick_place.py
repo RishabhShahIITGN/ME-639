@@ -80,12 +80,12 @@ GRIPPER_OPEN_CMD = 0.0
 GRIPPER_CLOSE_CMD = 255.0
 
 EE_SITE = "attachment_site"
-GRIPPER_OFFSET = 0.14     # Gripper pads are ~14 cm below EE site
-PRE_GRASP_HEIGHT = 0.12   # pad height above surface for pre-grasp
+GRIPPER_OFFSET = 0.14     # Physical offset from the Panda attachment site to gripper pads
+PRE_GRASP_HEIGHT = 0.30   # keep the gripper clear while rotating/translating above the table
 CUBE_HALF = 0.025
 GRASP_HEIGHT = CUBE_HALF + 0.01  # pad height above surface at grasp (= cube centre)
-LIFT_HEIGHT = 0.15        # minimum pad height above the pick surface when carrying
-TRANSIT_CLEARANCE = 0.03  # cube bottom must clear the tray walls by this much
+LIFT_HEIGHT = 0.25        # minimum pad height above the pick surface while carrying
+TRANSIT_CLEARANCE = 0.08  # cube bottom must clear the tray walls by this much
 LOWER_CLEARANCE = 0.003   # stop this far above the tray floor, then release
 SETTLE_STEPS = 1000       # sim steps to let physics settle after a grip change
 PLACE_SETTLE_STEPS = 500  # sim steps to let the cube come to rest after release
@@ -641,6 +641,10 @@ def run_episode(
     cube_start, cube_end, grasp_yaw, phases, placement.
     """
     model, data = build_model(seed=seed)
+    if model.nkey > 0:
+        data.qpos[:7] = model.key_qpos[0, :7]
+    else:
+        data.qpos[:7] = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
     mujoco.mj_forward(model, data)
 
     result: dict = {
