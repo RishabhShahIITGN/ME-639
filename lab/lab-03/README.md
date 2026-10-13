@@ -118,13 +118,13 @@ cd lab/lab-03
 source ../../venv/bin/activate
 
 # DLS only
-python3 scripts/ik_dls_pick_place.py --episodes 25 --seed 42 --no-gui
+python3 scripts/ik_dls_pick_place.py --episodes 25 --seed 19 --no-gui
 
 # One DLS episode, with a reproducible batch seed
-python3 scripts/ik_dls_pick_place.py --episodes 1 --seed 42 --no-gui
+python3 scripts/ik_dls_pick_place.py --episodes 1 --seed 19 --no-gui
 
 # QP with joint limits only
-python3 scripts/ik_qp_pick_place.py --episodes 25 --seed 42 --no-gui
+python3 scripts/ik_qp_pick_place.py --episodes 25 --seed 19 --no-gui
 ```
 
 `--seed` initializes the batch's random-number generator; the runner derives and prints a separate cube-spawn seed for each episode. Re-running with the same batch seed and episode count reproduces the same episode sequence. To reproduce episode N in that sequence, rerun with the same batch seed and `--episodes N` (the runner executes episodes 1 through N). The CLI does not currently accept a per-episode seed directly.
