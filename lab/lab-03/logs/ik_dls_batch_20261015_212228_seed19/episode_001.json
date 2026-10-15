@@ -1,0 +1,140 @@
+{
+  "success": true,
+  "reason": "success",
+  "failure_code": null,
+  "failure_phase": null,
+  "cube_start": [
+    0.39291098510290856,
+    0.23958971301205037,
+    0.23
+  ],
+  "cube_end": [
+    0.40982942491470287,
+    -0.1199704466211807,
+    0.22899271362098203
+  ],
+  "initial_pose": {
+    "position_m": [
+      0.39291098510290856,
+      0.23958971301205037,
+      0.23
+    ],
+    "quaternion_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "grasp_yaw": -9.553471613077402e-05,
+  "phases": {
+    "APPROACH": {
+      "ok": true,
+      "converged": true,
+      "steps": 965,
+      "pos_err": 0.0005420861387163676,
+      "planning_time_s": 0.2721023919939398,
+      "collisions": [],
+      "time": 60.089049339294434
+    },
+    "DESCEND": {
+      "ok": true,
+      "converged": true,
+      "steps": 884,
+      "pos_err": 0.0013565466808167202,
+      "planning_time_s": 0.2687623339925267,
+      "collisions": [],
+      "time": 58.44212889671326
+    },
+    "GRASP": {
+      "ok": true,
+      "pad_forces_N": {
+        "L": 38.508973818362115,
+        "R": 38.746496551413806
+      },
+      "collisions": [],
+      "time": 0.1834561824798584
+    },
+    "LIFT": {
+      "ok": true,
+      "converged": true,
+      "steps": 714,
+      "pos_err": 1.261470724313521e-06,
+      "planning_time_s": 0.19908547700924828,
+      "collisions": [],
+      "time": 45.29887127876282
+    },
+    "TRANSIT": {
+      "ok": true,
+      "converged": true,
+      "steps": 1215,
+      "pos_err": 2.042455106596427e-06,
+      "planning_time_s": 0.2953091399886034,
+      "collisions": [],
+      "time": 61.38829708099365
+    },
+    "LOWER": {
+      "ok": true,
+      "converged": true,
+      "steps": 693,
+      "pos_err": 3.005247105949852e-06,
+      "planning_time_s": 0.14477950700893416,
+      "collisions": [],
+      "time": 32.02665400505066
+    },
+    "RELEASE": {
+      "ok": true,
+      "converged": true,
+      "steps": 873,
+      "pos_err": 0.002285313466850215,
+      "planning_time_s": 0.20479367100506352,
+      "placement": {
+        "inside_footprint": true,
+        "on_floor": true,
+        "upright": true,
+        "at_rest": true,
+        "released": true,
+        "cube_pos": [
+          0.40982942491470287,
+          -0.1199704466211807,
+          0.22899271362098203
+        ],
+        "offset_xy": [
+          0.00017057508529710885,
+          2.9553378819296983e-05
+        ],
+        "speed": 5.341691919898307e-10
+      },
+      "time": 42.94546461105347
+    }
+  },
+  "placement": {
+    "inside_footprint": true,
+    "on_floor": true,
+    "upright": true,
+    "at_rest": true,
+    "released": true,
+    "cube_pos": [
+      0.40982942491470287,
+      -0.1199704466211807,
+      0.22899271362098203
+    ],
+    "offset_xy": [
+      0.00017057508529710885,
+      2.9553378819296983e-05
+    ],
+    "speed": 5.341691919898307e-10
+  },
+  "solver": "dls",
+  "minimum_clearance": {
+    "distance_m": 0.0014763599665449981,
+    "geom_pair": "geom71 <-> tray_wall_mx",
+    "phase": "RELEASE",
+    "samples": 5351
+  },
+  "time_to_solve_s": 300.98652328000026,
+  "planning_time_s": 1.3848325209983159,
+  "ik_iterations": 5344,
+  "episode": 0,
+  "seed": 1264954011
+}
