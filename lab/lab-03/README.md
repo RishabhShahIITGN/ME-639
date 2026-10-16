@@ -1,72 +1,84 @@
 # Lab 03 — Autonomous Pick-and-Place Manipulation with HEAL & Franka Emika Panda
 
-A robust, physics-accurate pick-and-place manipulation pipeline in [MuJoCo](https://mujoco.org/) comparing **Differential Inverse Kinematics (IK)** solvers across both 6-DOF and 7-DOF redundant robotic arms equipped with a Robotiq 2F-85 parallel-jaw gripper.
+A physics-accurate pick-and-place manipulation pipeline implemented in [MuJoCo](https://mujoco.org/), benchmarking **Differential Inverse Kinematics (IK)** solvers across both a 6-DOF industrial arm and a 7-DOF redundant collaborative arm equipped with a Robotiq 2F-85 parallel-jaw gripper.
 
-🎥 **Video Demonstration:**
-- **Franka Panda DLS Failure Mode Analysis:** [Watch on YouTube](https://youtu.be/ERtZ837I5WE) — Demonstrates redundant null-space elbow swivel and follower linkage tray-wall grazing during the `RELEASE` phase.
+📄 **Full Technical Report:** [Tutorial_4___itr.pdf](Tutorial_4___itr.pdf)
+
+---
+
+## Video Demonstrations
+
+All experiments and failure diagnostics are recorded and viewable on YouTube:
+
+| Robotic Platform | Solver / Scenario | Demonstration Link | Core Observation |
+|---|---|:---:|---|
+| **6-DOF Addverb HEAL** | **Mink Differential IK** | [Watch Video (Mink)](https://youtu.be/h-dL-vL3UDM?si=1semsxsM4L094ZeF) | Smooth baseline differential IK trajectory with quadratic task cost and collision limits. |
+| **6-DOF Addverb HEAL** | **Custom Damped Least Squares (DLS)** | [Watch Video (DLS)](https://youtu.be/FMAL-rnbg08?si=yBDw17tpFTI-orKf) | High-speed analytical Levenberg–Marquardt tracking achieving **2.5× faster** planning time. |
+| **6-DOF Addverb HEAL** | **Custom Quadratic Programming (QP)** | [Watch Video (QP)](https://youtu.be/oaHxvoVMIUw?si=IdQEXkaOgRmZANhr) | Box-constrained optimization strictly enforcing joint limits and velocity bounds. |
+| **7-DOF Franka Panda** | **Custom DLS Failure Analysis** | [Watch Video (Franka DLS Failure)](https://youtu.be/ERtZ837I5WE) | Diagnostic demonstration of redundant null-space elbow swivel causing tray wall grazing during `RELEASE`. |
 
 ---
 
 ## Table of Contents
 
-1. [Overview & Key Features](#overview--key-features)
+1. [Overview & System Architecture](#overview--system-architecture)
 2. [Workspace Analysis & Table Design](#workspace-analysis--table-design)
 3. [Environment Modeling & Programmatic Assembly](#environment-modeling--programmatic-assembly)
 4. [7-Phase Pick-and-Place State Machine](#7-phase-pick-and-place-state-machine)
-5. [Inverse Kinematics Formulations](#inverse-kinematics-formulations)
-   - [Off-the-Shelf Differential IK (Mink)](#1-off-the-shelf-differential-ik-mink)
-   - [Closed-Loop Damped Least Squares (DLS)](#2-closed-loop-damped-least-squares-dls-with-null-space-projection)
-   - [Constrained Quadratic Programming (QP)](#3-constrained-quadratic-programming-qp)
+5. [Trajectory Planning & Differential IK Formulations](#trajectory-planning--differential-ik-formulations)
+   - [Trajectory Conditioning & Clamping](#trajectory-conditioning--error-clamping)
+   - [1. Off-the-Shelf Differential IK (Mink)](#1-off-the-shelf-differential-ik-mink)
+   - [2. Closed-Loop Damped Least Squares (DLS)](#2-closed-loop-damped-least-squares-dls)
+   - [3. Constrained Quadratic Programming (QP)](#3-constrained-quadratic-programming-qp)
 6. [Experimental Results & Benchmarking](#experimental-results--benchmarking)
    - [HEAL 6-DOF Benchmark (250 Episodes, Seed 19)](#heal-6-dof-benchmark-250-episodes-seed-19)
    - [Franka Emika Panda 7-DOF Benchmark (30 Episodes, Seed 19)](#franka-emika-panda-7-dof-benchmark-30-episodes-seed-19)
 7. [Failure Mode & Collision Analysis](#failure-mode--collision-analysis)
    - [Robotiq Follower Linkage Table Scraping (Resolved)](#1-robotiq-follower-linkage-table-scraping-resolved)
    - [Franka Redundant Null-Space Tray Wall Grazing (YouTube Demo)](#2-franka-redundant-null-space-tray-wall-grazing-youtube-demo)
+   - [Implemented Engineering Safeguards](#3-implemented-engineering-safeguards)
 8. [Quickstart & Execution Guide](#quickstart--execution-guide)
 9. [Codebase Architecture & File Inventory](#codebase-architecture--file-inventory)
 
 ---
 
-## Overview & Key Features
+## Overview & System Architecture
 
-This lab implements an end-to-end autonomous manipulation pipeline that solves randomized pick-and-place tasks:
+This project implements an end-to-end autonomous manipulation pipeline solving randomized pick-and-place tasks:
 - **Robots Evaluated:**
-  - **HEAL 6-DOF Arm:** Anthropomorphic industrial manipulator (`single_arm_heal_effort_actuation_rs_mj.xml`).
-  - **Franka Emika Panda 7-DOF Arm:** Redundant collaborative robot (`panda_nohand.xml`).
-- **End-Effector:** Robotiq 2F-85 adaptive parallel-jaw gripper dynamically attached at runtime using MuJoCo's programmatic `MjSpec` API.
-- **IK Solvers Compared:**
-  1. **Mink** (Differential IK via OSQP with quadratic task costs and collision avoidance inequality constraints).
-  2. **DLS** (Closed-loop Damped Least Squares with pseudoinverse damping and posture-optimizing null-space projection).
-  3. **QP** (Box-constrained Quadratic Program mapping joint velocity bounds, position limits, and regularized positive-definite Hessian).
-- **Safety & Physics:** Continuous signed clearance distance queries (`mj_geomDistance`), gravity compensation feedforward (`qfrc_bias`), and dual-pad grasp force verification.
+  - **Addverb HEAL 6-DOF Arm:** Industrial non-redundant serial manipulator ($J(q) \in \mathbb{R}^{6 \times 6}$) where joint velocities are locally unique away from singularities (`single_arm_heal_effort_actuation_rs_mj.xml`).
+  - **Franka Emika Panda 7-DOF Arm:** Kinematically redundant arm ($J(q) \in \mathbb{R}^{6 \times 7}$) with a 1-dimensional null space requiring active posture stabilization (`panda_nohand.xml`).
+- **End-Effector:** Robotiq 2F-85 adaptive parallel-jaw gripper programmatically mounted at the arm flange using MuJoCo's `MjSpec` API.
+- **Solvers Benchmarked:** Mink (OSQP baseline), Closed-Loop Damped Least Squares (DLS), and Box-Constrained Quadratic Programming (QP).
+- **Control & Safety:** Joint PD torque control with gravity compensation feedforward (`qfrc_bias`), continuous signed clearance monitoring (`mj_geomDistance`), and bilateral grasp force verification.
 
 ```mermaid
 flowchart TD
     A[Workspace Reachability & Dexterity Analysis] --> B[Custom Ergonomic Table Design]
     B --> C[Programmatic MjSpec Scene Assembly]
-    C --> D[Uniform Random Cube Spawning]
+    C --> D[Uniform Random Cube Spawning: Seed 19]
     D --> E[7-Phase Finite State Machine]
-    E --> F{IK Solver Selection}
-    F -->|Off-the-shelf| G[Mink Differential IK + Collision Limits]
-    F -->|Custom DLS| H[Closed-Loop DLS + Null-Space Posture]
-    F -->|Custom QP| I[Box-Constrained QP + Joint Limits]
-    G --> J[Low-Level Joint PD Control + Gravity Comp]
-    H --> J
-    I --> J
-    J --> K[MuJoCo Physics Engine & Collision Monitor]
-    K --> L{Grasp / Placement Verification}
-    L -->|Pass| M[Log Episode Success & Metrics]
-    L -->|Contact / Timeout| N[Log Failure Reason & Clearance Distance]
+    E --> F[Straight-Line Breadcrumb Interpolation: v = 0.03 m/s]
+    F --> G{Differential IK Solver}
+    G -->|Baseline| H[Mink: OSQP + Collision Constraints]
+    G -->|Custom DLS| I[Levenberg-Marquardt DLS + Null-Space Posture]
+    G -->|Custom QP| J[Box-Constrained QP + Joint Limits]
+    H --> K[Low-Level Joint PD Control + Gravity Comp]
+    I --> K
+    J --> K
+    K --> L[MuJoCo Physics Engine & Collision Distance Monitor]
+    L --> M{Grasp & Placement Verification}
+    M -->|Pass| N[Log Episode Success & Performance Metrics]
+    M -->|Contact / Limit| O[Log Failure Reason & Min Clearance Margin]
 ```
 
 ---
 
 ## Workspace Analysis & Table Design
 
-Standard robotic tables (e.g., the default 1.2 m × 1.2 m, 0.80 m robosuite table) severely constrain manipulators by placing targets near reachability boundaries and causing collisions with the robot base turret. 
+Standard tables (such as the default 1.2 m × 1.2 m, 0.80 m robosuite table) severely constrain manipulators by placing targets near reachability boundaries and causing collisions with the robot base turret. 
 
-To determine the mathematically optimal table dimensions, reachable task workspace (gripper pointing vertically downward) and dexterous workspace (arbitrary yaw rotation) were computed via Monte Carlo discretization in `scripts/workspace_task.py` and `table_design.py`.
+Reachable task workspace (gripper pointing downward) and dexterous workspace (arbitrary yaw rotation) were computed via Monte Carlo discretization in `scripts/workspace_task.py` and `table_design.py`.
 
 ![Table Design Occupancy](table_design_occupancy.png)
 
@@ -112,7 +124,7 @@ The simulation scene is assembled programmatically at runtime using MuJoCo's mod
 
 ## 7-Phase Pick-and-Place State Machine
 
-The task supervisor executes a deterministic 7-phase state machine. Each phase regulates end-effector Cartesian waypoints, orientation quaternions, and gripper actuator commands:
+The task supervisor executes a deterministic 7-phase finite state machine:
 
 ```
   [APPROACH] ──> [DESCEND] ──> [GRASP] ──> [LIFT] ──> [TRANSIT] ──> [LOWER] ──> [RELEASE] ──> [DONE]
@@ -120,107 +132,105 @@ The task supervisor executes a deterministic 7-phase state machine. Each phase r
 
 1. **`APPROACH` (Pre-Grasp Waypoint):**
    - End-effector aligns directly above the randomized cube position at $z_{approach} = z_{table} + 0.12\text{ m} + \Delta z_{ee}$.
-   - End-effector orientation is aligned with the top-down normal vector combined with the cube's randomized yaw.
+   - End-effector orientation is aligned with the top-down normal vector combined with the nearest cube grasp yaw $\psi_{grasp}$.
 2. **`DESCEND` (Vertical Grasp Alignment):**
    - Gripper descends vertically along the Z-axis to the calibrated grasp height ($z_{grasp} = z_{table} + 0.035\text{ m} + \Delta z_{ee}$).
 3. **`GRASP` (Fingertip Closure):**
-   - Gripper actuator closes the 2F-85 fingers until simultaneous normal contact forces are established on opposing cube faces ($F_{pad} > 0.5\text{ N}$) or closure completes without jamming.
+   - Gripper actuator closes the 2F-85 fingers while holding arm posture steady, verifying grasp security via bilateral pad contact forces ($F_L, F_R \ge F_{min} = 0.5\text{ N}$).
 4. **`LIFT` (Vertical Object Retraction):**
-   - The arm ascends vertically to $z_{lift} = z_{table} + 0.15\text{ m} + \Delta z_{ee}$, lifting the cube cleanly off the table surface without tipping or slippage.
+   - Arm ascends vertically to $z_{lift} = z_{table} + 0.15\text{ m} + \Delta z_{ee}$, verifying vertical pickup displacement without tipping or slippage.
 5. **`TRANSIT` (Horizontal Tray Transfer):**
    - End-effector transfers the grasped block laterally across the workspace to a target waypoint positioned directly above the receptacle tray at $(0.41, -0.12, z_{lift})$.
 6. **`LOWER` (Receptacle Placement):**
-   - The arm lowers the block into the receptacle tray to $z_{place} = z_{table} + 0.035\text{ m} + \Delta z_{ee}$.
+   - Arm lowers the block into the receptacle tray just above the tray floor ($z_{place} = z_{table} + 0.035\text{ m} + \Delta z_{ee}$).
 7. **`RELEASE` (Detachment & Upward Retreat):**
-   - The gripper actuator commands full finger opening. Once the block detaches cleanly onto the tray floor, the arm retreats upward to safe clearance height $z_{lift}$.
-
-### Collision Avoidance & Continuous Distance Monitoring
-Every simulation timestep queries narrow-phase distances using `mujoco.mj_geomDistance`:
-- Evaluates signed clearances between robot links/gripper linkages and static furniture (`table`, `tray_base`, `tray_walls`).
-- Disallowed contacts (e.g., gripper base scraping the table or arm links striking tray boundaries) immediately trigger episode failure and are logged with the exact interacting geometry IDs and negative distance margins.
+   - Gripper opens fully, retreats vertically, and verifies strict placement criteria: cube inside tray footprint, resting on the floor at $z \approx 0.229\text{ m}$, upright, at rest, and detached.
 
 ---
 
-## Inverse Kinematics Formulations
+## Trajectory Planning & Differential IK Formulations
 
-To evaluate controller performance, three distinct mathematical formulations of differential inverse kinematics were implemented:
+### Trajectory Conditioning & Error Clamping
+
+Directly commanding large Cartesian displacements causes erratic, high-velocity joint swings. To enforce smooth, predictable trajectories:
+1. **Straight-Line Breadcrumb Interpolation:**
+   Trajectories are discretized into intermediate waypoints at constant Cartesian velocity $v_{move} = 0.03\text{ m/s}$:
+   $$T_{move} = \max\left(\frac{D}{v_{move}}, \, T_{min}\right), \quad N_{steps} = \max\left(1, \, \left\lfloor\frac{T_{move}}{\Delta t_{IK}}\right\rfloor\right)$$
+   $$p_d(\alpha_i) = p_{start} + \alpha_i (p_{target} - p_{start}), \quad q_d(\alpha_i) = \text{SLERP}(q_{start}, q_{target}, \alpha_i)$$
+   where $\alpha_i = i / N_{steps}$ and $\Delta t_{IK} = 0.01\text{ s}$.
+2. **Task-Space Error Clamping:**
+   The 6D task-space error $e = [\Delta p^T, \Delta \theta^T]^T \in \mathbb{R}^6$ is clamped to $e_{max} = 0.02\text{ m/rad}$ before computing desired velocity:
+   $$\bar{e} = e \cdot \min\left(1, \, \frac{e_{max}}{\|e\|_2}\right), \quad \dot{x}_d = \frac{\bar{e}}{\Delta t_{IK}}$$
+
+---
 
 ### 1. Off-the-Shelf Differential IK (Mink)
-[Mink](https://github.com/kevinzakka/mink) formulates IK as a quadratic optimization program solved at each step:
+[Mink](https://github.com/kevinzakka/mink) formulates differential IK as a configuration-space quadratic optimization problem:
 $$\min_{\Delta q} \frac{1}{2} \| J(q) \Delta q - e_x \|_W^2 + \frac{1}{2} \| \Delta q \|_{R}^2$$
 $$\text{subject to } \Delta q_{min} \le \Delta q \le \Delta q_{max}, \quad C \Delta q \le d$$
-- Enforces joint velocity limits, joint angle limits, and smooth Cartesian error damping.
-- Includes `mink.CollisionAvoidanceLimit` between robot collision geometries and obstacle geometries via linear distance inequalities.
+- Incorporates end-effector frame tracking, posture regularization, and `mink.CollisionAvoidanceLimit` linear distance inequalities.
+- Solved at each control step via OSQP.
 
-### 2. Closed-Loop Damped Least Squares (DLS) with Null-Space Projection
-DLS resolves kinematic singularities by damping the pseudoinverse of the end-effector Jacobian $J \in \mathbb{R}^{6 \times n}$:
-$$J^\dagger = J^T \left( J J^T + \lambda^2 I_6 \right)^{-1}$$
-where $\lambda = 0.05$ is the damping coefficient.
+---
 
-The task-space tracking error vector $e \in \mathbb{R}^6$ combines Cartesian position error and orientation error via quaternion vector-part dynamics:
-$$e = \begin{bmatrix} K_p (x_{target} - x_{ee}) \\ K_o \text{ori\_error}(R_{target}, R_{ee}) \end{bmatrix}$$
+### 2. Closed-Loop Damped Least Squares (DLS)
+Near kinematic singularities where $J$ loses rank, standard pseudo-inversion explodes. The Levenberg–Marquardt formulation simultaneously minimizes task tracking error and penalizes excessive joint velocities:
+$$\mathcal{J}(\dot{q}) = \|J\dot{q} - \dot{x}_d\|_2^2 + \lambda \|\dot{q}\|_2^2$$
+Expanding and setting the gradient to zero yields the analytical closed-form solution:
+$$\dot{q}_{task} = \left( J^T J + \lambda I_n \right)^{-1} J^T \dot{x}_d = J_{DLS}^\dagger \dot{x}_d$$
+where $\lambda = d^2$ with $d = 10^{-2}$.
 
 #### Redundancy Resolution (7-DOF Franka Panda)
-For the 7-DOF Franka arm ($n = 7$), the $6 \times 7$ Jacobian possesses a 1-dimensional null space. To prevent unconstrained elbow drift, an explicit null-space projector is integrated:
-$$P_{null} = I_n - J^\dagger J$$
-$$\dot{q}_{cmd} = J^\dagger e + P_{null} \cdot k_{null} (q_{default} - q)$$
-where:
-- $q_{default} = [0, 0, 0, -1.5708, 0, 1.5708, -0.7853]^T$ defines the natural upright arm posture.
-- $k_{null} = 1.0\text{ s}^{-1}$ pulls redundant joints toward posture rest without perturbing end-effector tracking.
-- Joint velocities are strictly clamped to physical actuator limits ($[-2.0, 2.0]\text{ rad/s}$).
+For the 7-DOF arm, an explicit null-space projector drives the redundant elbow toward a safe resting posture $q_{def}$ without perturbing end-effector tracking:
+$$\dot{q} = \dot{q}_{task} + \left( I_n - J_{DLS}^\dagger J \right) k_{null} (q_{def} - q)$$
+where $k_{null} = 0.5\text{ s}^{-1}$ and velocities are saturated to physical limits $[-2.0, 2.0]\text{ rad/s}$.
+
+---
 
 ### 3. Constrained Quadratic Programming (QP)
-Formulates instantaneous velocity resolution as a convex quadratic program solved via `scipy.optimize.linprog` or OSQP:
-$$\min_{\dot{q}} \frac{1}{2} \dot{q}^T P \dot{q} + c^T \dot{q}$$
-$$\text{subject to } \dot{q}_{min} \le \dot{q} \le \dot{q}_{max}$$
+While DLS applies velocity bounds by post-hoc clipping, the QP formulation natively embeds physical joint position and velocity limits directly into the optimization:
+$$\min_{\dot{q}} \frac{1}{2} \dot{q}^T P \dot{q} + c^T \dot{q} \quad \text{subject to } l \le \dot{q} \le u$$
+where:
+$$P = J^T J + \lambda I_n, \quad c = -J^T \dot{x}_d$$
+Adding $\lambda I_n$ ensures $P$ remains strictly positive definite and convex for redundant manipulators.
 
-- **Objective Construction:**
-  $$P = J^T J + \lambda^2 I_n, \quad c = -J^T K_p e$$
-  For the redundant 7-DOF Franka arm, $J^T J$ is rank-deficient ($\text{rank} \le 6$). Adding the regularization diagonal term $\lambda^2 I_7$ ($\lambda = 10^{-2}$) ensures $P$ is strictly positive definite and convex.
-- **Dynamic Joint Velocity Bounds:**
-  $$\dot{q}_{max, i} = \min\left(v_{limit, i}, \, \frac{q_{max, i} - q_i}{\Delta t}\right), \quad \dot{q}_{min, i} = \max\left(-v_{limit, i}, \, \frac{q_{min, i} - q_i}{\Delta t}\right)$$
-  ensuring joints naturally decelerate before reaching mechanical limits.
+The lower and upper velocity bounds for joint $k \in \{1, \dots, n\}$ enforce both speed saturation ($\dot{q}_{max} = 2.0\text{ rad/s}$) and mechanical joint limits $[q_{k,min}, q_{k,max}]$:
+$$l_k = \max\left(-\dot{q}_{max}, \, \frac{q_{k,min} - q_k}{\Delta t_{IK}}\right), \quad u_k = \min\left(\dot{q}_{max}, \, \frac{q_{k,max} - q_k}{\Delta t_{IK}}\right)$$
 
 ---
 
 ## Experimental Results & Benchmarking
 
-Comprehensive overnight batch benchmarks were executed across both robotic platforms using a deterministic global seed (`--seed 19`) to evaluate success rates, solver computational latency, iteration counts, and minimum obstacle clearance margins.
+Benchmarks were evaluated on both manipulators using a shared random seed (`--seed 19`) across identical spawn distributions.
 
 ### HEAL 6-DOF Benchmark (250 Episodes, Seed 19)
 
-All three solvers achieved a **100.0% success rate** across 250 randomly spawned pick-and-place episodes.
+All three solvers achieved a **100.0% success rate** across 250 randomized pick-and-place episodes.
 
-| Metric | Mink (Off-the-shelf) | DLS (Closed-loop) | QP (Constrained) |
-|---|:---:|:---:|:---:|
-| **Success Rate** | **100.0%** (250/250) | **100.0%** (250/250) | **100.0%** (250/250) |
-| **Mean Planning Time per Episode** | 0.753 s | **0.299 s** (⚡ 2.5× faster) | 0.585 s (⚡ 1.3× faster) |
-| **Mean Wall-Clock Time per Episode** | 9.15 s | **8.51 s** | 9.15 s |
-| **Median IK Iterations** | 2,893 | 2,895 | 2,895 |
-| **Total Solver Iterations** | 713,155 | 713,306 | 713,302 |
-| **Minimum Clearance Margin** | 1.39 mm | 1.57 mm | 1.57 mm |
+| IK Solver | Episodes ($N$) | Success Rate (%) | Mean Planning Time (s / episode) | Mean Wall Time (s / episode) | Total IK Iters (Cumulative / Mean) | Min Clearance (mm) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Mink (Baseline)** | 250 | **100.0%** (250/250) | 0.7526 | 9.1484 | 713,155 (2852.6) | 1.388 |
+| **Custom DLS** | 250 | **100.0%** (250/250) | **0.2991** (⚡ 2.5× faster) | **8.5118** | 713,306 (2853.2) | **1.573** |
+| **Custom QP (daqp)** | 250 | **100.0%** (250/250) | 0.5851 (⚡ 1.3× faster) | 9.1510 | 713,302 (2853.2) | **1.573** |
 
 ![HEAL Comparison Plots Seed 19](logs/ik_comparison_plots_seed19.png)
 
-#### Key Takeaways (HEAL 6-DOF):
-1. **Computational Efficiency:** The analytical closed-loop DLS formulation runs **2.5× faster** than Mink (0.299 s vs 0.753 s per episode), as it computes the pseudoinverse directly without setting up an iterative optimization problem.
-2. **Path Convergence:** All three solvers produced virtually identical iteration counts (~2,895 steps), indicating that well-tuned proportional tracking gains achieve the same trajectory fidelity as constrained optimization when joints remain safely away from limits.
-3. **Clearance:** All solvers maintained a safe positive clearance margin (> 1.38 mm) away from all furniture surfaces.
+#### Key Observations (HEAL 6-DOF):
+1. **Planning Speed:** Custom DLS is the fastest solver (0.2991 s/episode), running **2.5× faster** than Mink and **1.9× faster** than Custom QP due to direct analytical pseudoinverse computation.
+2. **Iteration Consistency:** All solvers converged in nearly identical iteration counts (~2,853 steps), validating that fixed-velocity breadcrumb interpolation produces identical waypoint trajectories.
+3. **Clearance:** All solvers maintained positive minimum clearances (> 1.38 mm), avoiding furniture contact.
 
 ---
 
 ### Franka Emika Panda 7-DOF Benchmark (30 Episodes, Seed 19)
 
-The redundant 7-DOF kinematic chain introduces an additional degree of freedom, requiring active null-space stabilization.
+The redundant 7-DOF kinematic chain with physical joint limits differentiates solver performance.
 
-| Metric | Mink (Off-the-shelf) | DLS (Null-space projected) | QP (Regularized) |
-|---|:---:|:---:|:---:|
-| **Success Rate** | **100.0%** (30/30) | **93.3%** (28/30) | **96.7%** (29/30) |
-| **Mean Planning Time per Episode** | 1.229 s | **1.166 s** | 1.275 s |
-| **Mean Wall-Clock Time per Episode** | 206.59 s | 272.77 s | 246.17 s |
-| **Total Solver Iterations** | 145,620 | 143,745 | 140,824 |
-| **Mean Iterations per Episode** | 4,854 | 4,889 | 4,856 |
-| **Minimum Obstacle Clearance** | **+1.58 mm** | **-0.031 mm** (grazing) | **-0.025 mm** |
+| IK Solver | Episodes ($N$) | Success Rate (%) | Mean Planning Time (s / episode) | Mean Wall Time (s / episode) | Total IK Iters (Cumulative / Mean) | Min Clearance (mm) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Mink (Baseline)** | 30 | **100.0%** (30/30) | 1.229 | **206.59** | 145,631 (4854.4) | **+1.580** |
+| **Custom DLS** | 30 | 93.33% (28/30) | **1.166** | 272.77 | 143,745 (4791.5) | -0.031 (grazing) |
+| **Custom QP (daqp)** | 30 | 96.67% (29/30) | 1.275 | 246.17 | 144,644 (4821.5) | -0.025 (grazing) |
 
 ![Franka Comparison Plots Seed 19](logs/ik_franka_comparison_plots_seed19.png)
 
@@ -250,40 +260,35 @@ This ensures the follower linkage remains elevated above the table plane through
 
 🎥 **Demonstration Video:** [Franka DLS Failure Mode on YouTube](https://youtu.be/ERtZ837I5WE)
 
-In the 30-episode Franka DLS batch, **Episodes 5 and 6 failed** during the `RELEASE` phase despite perfectly grasping, transporting, and depositing the cube upright into the tray.
+In the 30-episode Franka benchmark, **three episodes failed**: two in Custom DLS (Episodes 5 & 6) and one in Custom QP (Episode 12).
 
-```json
-{
-  "episode": 5,
-  "phase": "RELEASE",
-  "success": false,
-  "failure_reason": null,
-  "minimum_clearance": {
-    "distance_m": -3.0615e-05,
-    "geom_pair": "geom71 <-> tray_wall_mx",
-    "phase": "RELEASE",
-    "samples": 3661
-  }
-}
-```
+| Method | Episode File | Cube Start $(x, y, z)$ (m) | Cube End $(x, y, z)$ (m) | Min Clearance | Plan / Wall Time | Total IK Iters |
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| **Custom DLS** | `episode_005.json` | $(0.481, 0.139, 0.230)$ | $(0.406, -0.122, 0.229)$ | **-0.0306 mm** | 0.895 s / 186.3 s | 3,654 |
+| **Custom DLS** | `episode_006.json` | $(0.493, 0.058, 0.230)$ | $(0.404, -0.121, 0.229)$ | **-0.0127 mm** | 0.792 s / 163.8 s | 3,211 |
+| **Custom QP** | `episode_012.json` | $(0.420, 0.153, 0.230)$ | $(0.407, -0.122, 0.229)$ | **-0.0249 mm** | 0.827 s / 156.6 s | 3,835 |
 
-#### Root Cause Analysis:
-1. **Primary Task vs. Secondary Task Decoupling:** In DLS, the primary task regulates Cartesian end-effector velocity ($\dot{x} = J \dot{q}$). The secondary posture projection $P_{null} k_{null} (q_{default} - q)$ operates strictly within the null space of $J$.
-2. **Redundant Elbow Swivel During Retreat:** When opening the gripper fingers and initiating the upward vertical retreat, the end-effector velocity is small. The null-space term pulls the redundant elbow toward $q_{default}$.
-3. **Geometric Grazing:** As the arm reconfigures its redundant joints, the outer knuckle of the Robotiq follower linkage (`geom71`) brushes the exterior lip of the raised tray wall (`tray_wall_mx`) by **$-30.6\,\mu\text{m}$** ($-0.03\text{ mm}$).
-4. **Why Mink Succeeded:** Mink directly incorporates geometric collision distance inequalities ($C \Delta q \le d$) into its QP constraint matrix, actively preventing null-space motion from entering obstacle safety zones. Pure DLS null-space projection is obstacle-unaware.
+#### Diagnostic Findings:
+1. **Task Success vs. Strict Collision Flagging:** In all three failed runs, the manipulation task physically succeeded—the cube was placed cleanly inside the tray, upright, at rest, and released. However, the safety monitor flagged a micro-penetration ($-12.7\,\mu\text{m}$ to $-30.6\,\mu\text{m}$).
+2. **Mechanism of Contact:** The solver exited `PLACE` upon reaching within $5\text{ mm}$ position tolerance (`POS_TOL = 0.005 m`), leaving the cube slightly shifted toward the $-X$ tray wall ($x \approx 0.404 - 0.406\text{ m}$). Upon opening fingers during `RELEASE`, the outer pad linkage (`geom73`) lightly brushed against the $15\text{ mm}$ wall (`tray_wall_mx`).
+3. **Why Mink Avoided This:** Mink directly incorporates obstacle distance inequality constraints into its optimization, preventing secondary null-space reconfiguration from encroaching on the tray wall boundary.
 
-#### Engineering Mitigations:
-- **Repulsive Null-Space Potential:** Add an artificial obstacle potential field gradient $\nabla U_{rep}(q)$ into the null-space projection:
-  $$\dot{q}_{secondary} = P_{null} \left( k_{null}(q_{default} - q) + \nabla U_{rep}(q) \right)$$
-- **Elevated Retreat Corridor:** Increase the vertical ascent distance before engaging lateral null-space realignment during the `RELEASE` phase.
+---
+
+### 3. Implemented Engineering Safeguards
+
+1. **Tightening Placement Tolerance:** Lowering `POS_TOL` from 5 mm to 2 mm centers the gripper strictly over the tray midpoint ($x = 0.410\text{ m}$).
+2. **Yaw Alignment Reset:** Resetting target orientation to $0^\circ$ yaw during `TRANSIT` ensures the opening fingers remain parallel to tray boundaries.
+3. **Step Error Clamping ($e_{max} = 0.02$):** Eliminates velocity spikes that cause joint oscillations near table boundaries.
+4. **Valid Keyframe Initialization:** Loading the official home keyframe (`model.key_qpos[0, :7]`) prevents Franka Joint 4 ($0.0\text{ rad}$) from starting outside its physical range ($[-3.07, -0.07]\text{ rad}$).
+5. **Softened Null-Space Gain ($k_{null} = 0.5$):** Prevents the secondary posture task from overpowering primary Cartesian trajectory tracking.
 
 ---
 
 ## Quickstart & Execution Guide
 
-### Prerequisites & Setup
-Activate the Python virtual environment containing MuJoCo, Mink, and NumPy:
+### Environment Setup
+Activate the virtual environment containing MuJoCo, Mink, and NumPy:
 ```bash
 cd lab/lab-03
 source ../../venv/bin/activate
@@ -293,19 +298,19 @@ source ../../venv/bin/activate
 Run a single interactive pick-and-place episode with live rendering:
 
 ```bash
-# HEAL 6-DOF Robot:
+# HEAL 6-DOF Manipulator:
 python3 scripts/ik_pick_place.py          # Mink
-python3 scripts/ik_dls_pick_place.py      # DLS
-python3 scripts/ik_qp_pick_place.py       # QP
+python3 scripts/ik_dls_pick_place.py      # Custom DLS
+python3 scripts/ik_qp_pick_place.py       # Custom QP
 
-# Franka 7-DOF Panda Robot:
+# Franka 7-DOF Panda Manipulator:
 python3 scripts_franka/ik_pick_place.py      # Mink
-python3 scripts_franka/ik_dls_pick_place.py  # DLS
-python3 scripts_franka/ik_qp_pick_place.py   # QP
+python3 scripts_franka/ik_dls_pick_place.py  # Custom DLS
+python3 scripts_franka/ik_qp_pick_place.py   # Custom QP
 ```
 
 ### 2. Headless Batch Benchmarks
-Run multi-episode headless benchmark batches with a deterministic seed:
+Run multi-episode headless benchmarks with deterministic seed reproduction (`--seed 19`):
 
 ```bash
 # HEAL 6-DOF (25 episodes):
@@ -323,10 +328,10 @@ python3 scripts_franka/ik_qp_pick_place.py --episodes 30 --seed 19 --no-gui
 Generate publication-quality 2×2 multi-panel comparison figures (300 DPI):
 
 ```bash
-# HEAL 6-DOF benchmark figure (logs/ik_comparison_plots_seed19.png):
+# HEAL 6-DOF figure (logs/ik_comparison_plots_seed19.png):
 python3 scripts/plot_results.py
 
-# Franka 7-DOF benchmark figure (logs/ik_franka_comparison_plots_seed19.png):
+# Franka 7-DOF figure (logs/ik_franka_comparison_plots_seed19.png):
 python3 scripts_franka/plot_results_frank.py
 ```
 
@@ -337,6 +342,7 @@ python3 scripts_franka/plot_results_frank.py
 ```
 lab/lab-03/
 ├── README.md                                # Comprehensive laboratory documentation
+├── Tutorial_4___itr.pdf                     # Formal research paper / technical lab report
 ├── table_design.py                          # Workspace analysis & table geometry optimization
 ├── table_design.json                        # Output table parameters & placement coordinates
 ├── heal_pick_place.xml                      # Generated MuJoCo XML scene for HEAL arm
@@ -365,10 +371,8 @@ lab/lab-03/
 
 ---
 
-## Conclusion & Recommendations
+## Conclusion
 
-1. **Solver Selection Guidelines:**
-   - For standard 6-DOF manipulators operating in uncluttered workspaces, **Closed-Loop DLS** delivers the optimal balance of speed (2.5× faster than QP/Mink) and numerical stability with zero failure rate.
-   - For redundant 7-DOF manipulators operating near narrow receptacles or obstacles, **Mink (Inequality QP)** is recommended because its explicit collision constraints prevent null-space reconfiguration from causing secondary link grazing.
-2. **Physical Contact Calibration:**
-   - Multi-linkage adaptive grippers (e.g. Robotiq 2F-85) possess closing travel envelopes that extend beyond fingertip rest planes. Grasp heights must always be offset ($+1\text{ cm}$) relative to object center to prevent follower linkage table scraping.
+1. **Speed vs. Constraint Handling:** In unconstrained workspaces (6-DOF HEAL), all solvers achieve 100.0% reliability, with **Custom DLS** offering the highest computational speed (0.299 s). In constrained redundant settings (7-DOF Franka), **Mink** delivers superior reliability (100.0%) and execution smoothness by explicitly enforcing collision inequalities.
+2. **Trajectory Conditioning:** Straight-line breadcrumb interpolation ($v_{move} = 0.03\text{ m/s}$), step error clamping ($e_{max} = 0.02$), and gentle null-space damping ($k_{null} = 0.5$) are essential prerequisites for stable differential IK execution.
+3. **Physical Clearance Calibration:** Multi-bar linkage grippers require intentional vertical offsets ($+1\text{ cm}$) to accommodate closing arcs without ground scraping.
