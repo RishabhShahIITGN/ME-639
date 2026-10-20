@@ -111,6 +111,36 @@ The arm uses a PD joint controller with gravity compensation. The gripper is con
 
 Keep both windows open while operating the simulation. Close the Tkinter control window or the MuJoCo viewer to end the simulation. The script requires a graphical desktop session for both windows.
 
-## Lab 03
+## Lab 03 — Autonomous Pick-and-Place Manipulation with HEAL & Franka Emika Panda
 
-See the [`lab-03/`](lab-03/) folder for the Lab 03 materials, documentation, and implementation.
+A physics-accurate pick-and-place manipulation pipeline in [MuJoCo](https://mujoco.org/), benchmarking Differential Inverse Kinematics (IK) solvers across both the 6-DOF Addverb HEAL and 7-DOF redundant Franka Emika Panda robotic arms.
+
+📄 **Technical Report:** [`lab-03/Tutorial_4___itr.pdf`](lab-03/Tutorial_4___itr.pdf)  
+📁 **Detailed Documentation & Code:** See the [`lab-03/`](lab-03/) directory and [`lab-03/README.md`](lab-03/README.md).
+
+### Video Demonstrations
+
+- **HEAL 6-DOF (Mink IK):** [Watch Video](https://youtu.be/h-dL-vL3UDM?si=1semsxsM4L094ZeF)
+- **HEAL 6-DOF (Custom DLS):** [Watch Video](https://youtu.be/FMAL-rnbg08?si=yBDw17tpFTI-orKf)
+- **HEAL 6-DOF (Custom QP):** [Watch Video](https://youtu.be/oaHxvoVMIUw?si=IdQEXkaOgRmZANhr)
+- **Franka 7-DOF (DLS Failure Analysis):** [Watch Video](https://youtu.be/ERtZ837I5WE)
+
+### Quick Run
+
+From the repository root, activate the project virtual environment and run interactive pick-and-place episodes:
+
+```bash
+cd lab/lab-03
+source ../../venv/bin/activate
+
+# HEAL 6-DOF Pick-and-Place:
+python3 scripts/ik_pick_place.py          # Mink
+python3 scripts/ik_dls_pick_place.py      # Custom DLS
+python3 scripts/ik_qp_pick_place.py       # Custom QP
+
+# Franka 7-DOF Pick-and-Place:
+python3 scripts_franka/ik_pick_place.py      # Mink
+python3 scripts_franka/ik_dls_pick_place.py  # Custom DLS
+python3 scripts_franka/ik_qp_pick_place.py   # Custom QP
+```
+
