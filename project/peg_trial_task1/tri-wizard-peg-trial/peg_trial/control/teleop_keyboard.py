@@ -63,27 +63,87 @@ class Teleop(Node):
     def current_pose(self):
         if self.target is None:
             q = self.arm.joints()
-            x, y, z, _ = fk(q)
-            self.target = Pose(x, y, z, math.pi / 2)
+            if q is None:
+                return Pose(0.16, 0.0, 0.08, math.pi / 2)
+            x, y, z, pitch = fk(q)
+            if z > 0.14 or abs(pitch - math.pi / 2) > 0.4:
+                self.target = Pose(0.16, 0.0, 0.08, math.pi / 2)
+            else:
+                self.target = Pose(x, y, z, math.pi / 2)
         return self.target
 
-    def go(self, pose: Pose, speed=0.05, line=True):
+    def go(self, pose: Pose, speed=0.04, line=True):
         start = self.current_pose()
+        q_start = self.arm.joints()
+        if q_start is None:
+            print("\r  ! no joint states from arm")
+            return False
+
+        # 1. Protect against base singularity and workspace limits
+        if pose.x < 0.08:
+            print(f"\r  ! too close to base (x={pose.x:.3f} < 0.08m)")
+            return False
+        if pose.x > 0.24:
+            print(f"\r  ! beyond maximum reach (x={pose.x:.3f} > 0.24m)")
+            return False
+        r = math.hypot(pose.x - 0.012, pose.y)
+        if r < 0.10:
+            print(f"\r  ! radial distance too close to base (r={r:.3f} < 0.10m)")
+            return False
+        if r > 0.24:
+            print(f"\r  ! radial distance out of reach (r={r:.3f} > 0.24m)")
+            return False
+        if pose.z < -0.07:
+            print(f"\r  ! table collision limit (z={pose.z:.3f} < -0.07m)")
+            return False
+        if pose.z > 0.22:
+            print(f"\r  ! maximum height limit (z={pose.z:.3f} > 0.22m)")
+            return False
+
+        # 2. Compute IK for path
         try:
             if line:
                 poses = interpolate_line(start, pose, 0.01)
-                seg = max(0.3, math.dist((start.x, start.y, start.z), (pose.x, pose.y, pose.z)) / speed) / len(poses)
-                pts = [(ik(p), seg * (i + 1)) for i, p in enumerate(poses)]
+                ik_points = [ik(p) for p in poses]
             else:
-                pts = [(ik(pose), 2.0)]
+                poses = [pose]
+                ik_points = [ik(pose)]
         except IKError as e:
             print(f"\r  ! unreachable: {e}")
             return False
+
+        # 3. Detect sudden angle jumps (e.g. crossing branch cuts or singularities)
+        MAX_SAFE_STEP = 0.40  # rad (~23 deg) per Cartesian step
+        prev_q = q_start
+        for q in ik_points:
+            for j in range(4):
+                if abs(q[j] - prev_q[j]) > MAX_SAFE_STEP:
+                    print(f"\r  ! motion rejected: sudden joint{j+1} jump ({abs(q[j] - prev_q[j]):.2f} rad)")
+                    return False
+            prev_q = q
+
+        # 4. Enforce maximum joint velocity so motors never spin wildly
+        MAX_JOINT_VEL = 0.8  # rad/s max safe joint speed
+        pts = []
+        t_acc = 0.0
+        prev_q = q_start
+        prev_p = start
+
+        for p, q in zip(poses, ik_points):
+            cart_dist = math.dist((prev_p.x, prev_p.y, prev_p.z), (p.x, p.y, p.z))
+            t_cart = cart_dist / speed
+            t_joint = max(abs(q[j] - prev_q[j]) for j in range(4)) / MAX_JOINT_VEL
+            dt = max(0.12, t_cart, t_joint)
+            t_acc += dt
+            pts.append((q, t_acc))
+            prev_q = q
+            prev_p = p
+
         self.target = pose
         print(f"\r  -> x={pose.x:.3f} y={pose.y:.3f} z={pose.z:.3f}")
         return self.arm.move(pts, settle=0.0)
 
-    def handle(self, k):
+    def handle_key(self, k):
         p = self.current_pose()
         s = self.step
         g = self.cfg["grasp"]
@@ -129,8 +189,13 @@ class Teleop(Node):
             self.go(Pose(it["x"], it["y"], z), line=False)
         elif k == "h":
             self.target = None
-            self.arm.move([(self.cfg["motion"]["home_joints"], 3.0)])
-            self.target = None
+            q_now = self.arm.joints() or [0.0, 0.0, 0.0, 1.5708]
+            ready_joints = [0.0, 0.0, 0.0, 1.5708]
+            max_d = max(abs(a - b) for a, b in zip(q_now, ready_joints))
+            t_home = max(3.0, max_d / 0.6)
+            print(f"\r  moving to ready pose (gripper down) in {t_home:.1f}s ...")
+            self.arm.move([(ready_joints, t_home)], settle=0.2)
+            self.target = Pose(0.16, 0.0, 0.08, math.pi / 2)
         elif k == "?":
             print(HELP.format(step=int(self.step * 1000)))
 
@@ -155,12 +220,12 @@ def main():
                 if k in ("\x1b", "\x03"):
                     break
                 if k == " ":                       # E-STOP is handled HERE, never blocked
-                    node.handle(k)
+                    node.handle_key(k)
                     continue
                 if worker and worker.is_alive():   # a motion is still running
                     print("\r  (busy — wait, or SPACE to stop)")
                     continue
-                worker = threading.Thread(target=node.handle, args=(k,), daemon=True)
+                worker = threading.Thread(target=node.handle_key, args=(k,), daemon=True)
                 worker.start()
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
