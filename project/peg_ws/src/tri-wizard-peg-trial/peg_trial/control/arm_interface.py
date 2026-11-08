@@ -1,0 +1,169 @@
+"""One small class that hides HOW we talk to the robot.
+
+backend (config/task.yaml -> robot.backend):
+  ros2_control  : ROBOTIS open_manipulator Humble bringup (real robot or Gazebo).
+                  Arm  -> trajectory_msgs/JointTrajectory on /arm_controller/joint_trajectory
+                  Grip -> control_msgs/action/GripperCommand on /gripper_controller/gripper_cmd
+  omx_services  : older open_manipulator_x_controller (services /goal_joint_space_path,
+                  /goal_tool_control from open_manipulator_msgs)
+  dry_run       : no robot at all, only prints + fakes joint states (test the logic)
+
+Every call checks the emergency-stop flag. When E-STOP is pressed the arm is
+told to hold its current position and every running motion returns False.
+"""
+from __future__ import annotations
+
+import threading
+import time
+
+from builtin_interfaces.msg import Duration
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
+ESTOP_TOPIC = "/peg_trial/estop"
+
+
+def _dur(t: float) -> Duration:
+    return Duration(sec=int(t), nanosec=int((t - int(t)) * 1e9))
+
+
+class ArmInterface:
+    def __init__(self, node, robot_cfg: dict):
+        self.node = node
+        self.cfg = robot_cfg
+        self.backend = robot_cfg.get("backend", "ros2_control")
+        self.names = robot_cfg["joint_names"]
+        self._q = None
+        self._lock = threading.Lock()
+        self.estopped = False
+
+        node.create_subscription(Bool, ESTOP_TOPIC, self._on_estop, 10)
+        self.estop_pub = node.create_publisher(Bool, ESTOP_TOPIC, 10)
+
+        if self.backend == "dry_run":
+            self._q = [0.0, -1.05, 0.35, 0.70]
+        else:
+            node.create_subscription(JointState, robot_cfg["joint_states_topic"], self._on_js, 10)
+
+        if self.backend == "ros2_control":
+            from control_msgs.action import GripperCommand
+            from rclpy.action import ActionClient
+            self._GripperCommand = GripperCommand
+            self.traj_pub = node.create_publisher(JointTrajectory, robot_cfg["arm_trajectory_topic"], 10)
+            self.grip_client = ActionClient(node, GripperCommand, robot_cfg["gripper_action"])
+        elif self.backend == "omx_services":
+            from open_manipulator_msgs.srv import SetJointPosition
+            self._SetJointPosition = SetJointPosition
+            self.joint_cli = node.create_client(SetJointPosition, robot_cfg["joint_service"])
+            self.tool_cli = node.create_client(SetJointPosition, robot_cfg["tool_service"])
+
+    # ---------------- state ----------------
+    def _on_js(self, msg: JointState):
+        idx = {n: i for i, n in enumerate(msg.name)}
+        if all(n in idx for n in self.names):
+            with self._lock:
+                self._q = [msg.position[idx[n]] for n in self.names]
+
+    def _on_estop(self, msg: Bool):
+        if msg.data and not self.estopped:
+            self.node.get_logger().error("EMERGENCY STOP received -> holding position")
+            self.estopped = True
+            self.hold()
+        elif not msg.data and self.estopped:
+            self.node.get_logger().warn("E-stop released")
+            self.estopped = False
+
+    def joints(self):
+        with self._lock:
+            return list(self._q) if self._q else None
+
+    def wait_for_joints(self, timeout=10.0) -> bool:
+        t0 = time.time()
+        while self.joints() is None and time.time() - t0 < timeout:
+            time.sleep(0.05)
+        return self.joints() is not None
+
+    def trigger_estop(self):
+        self.estop_pub.publish(Bool(data=True))
+
+    # ---------------- arm ----------------
+    def hold(self):
+        q = self.joints()
+        if q is None or self.backend == "dry_run":
+            return
+        if self.backend == "ros2_control":
+            self._publish_traj([(q, 0.2)])
+        else:
+            self._send_joint(q, 0.2)
+
+    def _publish_traj(self, points):
+        msg = JointTrajectory()
+        msg.joint_names = list(self.names)
+        for q, t in points:
+            msg.points.append(JointTrajectoryPoint(positions=[float(a) for a in q], time_from_start=_dur(t)))
+        self.traj_pub.publish(msg)
+
+    def _send_joint(self, q, t):
+        req = self._SetJointPosition.Request()
+        req.planning_group = ""
+        req.joint_position.joint_name = list(self.names)
+        req.joint_position.position = [float(a) for a in q]
+        req.path_time = float(t)
+        self.joint_cli.call_async(req)
+
+    def _sleep(self, sec) -> bool:
+        """Sleep but wake up immediately on E-STOP. Returns False if stopped."""
+        end = time.time() + sec
+        while time.time() < end:
+            if self.estopped:
+                return False
+            time.sleep(0.02)
+        return not self.estopped
+
+    def move(self, points, settle=0.15) -> bool:
+        """points = [(q[4], time_from_start), ...]. Blocks until done."""
+        if self.estopped or not points:
+            return not self.estopped
+        total = points[-1][1]
+        if self.backend == "ros2_control":
+            self._publish_traj(points)
+        elif self.backend == "omx_services":
+            prev = 0.0
+            for q, t in points:          # services take one goal at a time
+                self._send_joint(q, max(0.1, t - prev))
+                if not self._sleep(max(0.1, t - prev)):
+                    return False
+                prev = t
+            return self._sleep(settle)
+        else:
+            self.node.get_logger().info(f"[dry_run] move {len(points)} pts in {total:.2f}s -> {[round(a, 2) for a in points[-1][0]]}")
+            ok = self._sleep(min(total, 0.3))
+            with self._lock:
+                self._q = list(points[-1][0])
+            return ok
+        return self._sleep(total + settle)
+
+    # ---------------- gripper ----------------
+    def gripper(self, cmd: str, wait=0.8) -> bool:
+        if self.estopped:
+            return False
+        pos = self.cfg["gripper_open"] if cmd == "open" else self.cfg["gripper_close"]
+        if self.backend == "ros2_control":
+            goal = self._GripperCommand.Goal()
+            goal.command.position = float(pos)
+            goal.command.max_effort = float(self.cfg.get("gripper_max_effort", 5.0))
+            if not self.grip_client.wait_for_server(timeout_sec=2.0):
+                self.node.get_logger().error("gripper action server not available")
+                return False
+            self.grip_client.send_goal_async(goal)
+        elif self.backend == "omx_services":
+            req = self._SetJointPosition.Request()
+            req.joint_position.joint_name = ["gripper"]
+            req.joint_position.position = [float(pos)]
+            req.path_time = 0.5
+            self.tool_cli.call_async(req)
+        else:
+            self.node.get_logger().info(f"[dry_run] gripper {cmd}")
+            wait = 0.1
+        return self._sleep(wait)

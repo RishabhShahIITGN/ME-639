@@ -1,0 +1,32 @@
+# Extrinsic calibration of BOTH RGB-D cameras.
+# T_base_cam = 4x4 pose of the camera OPTICAL frame expressed in the robot base frame
+# (base = OMX link1: x forward, y left, z up, origin at centre of base plate).
+#
+# Fill these with:  python3 scripts/calibrate_extrinsics.py --camera cam1 ...
+# (puts an ArUco marker at a known spot on the table and solves the pose).
+# Intrinsics (fx, fy, cx, cy) are read live from each camera's /camera_info topic.
+#
+# The defaults below = a camera 0.55 m above the table, looking straight down,
+# centred over (x=0.20, y=±0.10). Replace them after calibrating!
+
+depth_scale: 0.001          # 16UC1 depth in mm -> m (RealSense). Ignored for 32FC1.
+
+cameras:
+  cam1:                      # e.g. looks mostly at the pegs
+    color_topic: /cam1/camera/color/image_raw
+    depth_topic: /cam1/camera/aligned_depth_to_color/image_raw
+    info_topic:  /cam1/camera/color/camera_info
+    T_base_cam:
+      - [0.0, -1.0,  0.0, 0.20]
+      - [-1.0, 0.0,  0.0, 0.10]
+      - [0.0,  0.0, -1.0, 0.55]
+      - [0.0,  0.0,  0.0, 1.0]
+  cam2:                      # e.g. looks mostly at the board
+    color_topic: /cam2/camera/color/image_raw
+    depth_topic: /cam2/camera/aligned_depth_to_color/image_raw
+    info_topic:  /cam2/camera/color/camera_info
+    T_base_cam:
+      - [0.0, -1.0,  0.0, 0.20]
+      - [-1.0, 0.0,  0.0, -0.10]
+      - [0.0,  0.0, -1.0, 0.55]
+      - [0.0,  0.0,  0.0, 1.0]

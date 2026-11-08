@@ -1,0 +1,58 @@
+# Everything about the task + robot that you may need to tune. All lengths in metres.
+
+# OMX reach is SHORT for 10 cm pegs with a straight-down gripper (max ~0.13 m high).
+# Best fix: put the robot on a 5 cm riser -> table is 5 cm BELOW the base -> table_z = -0.05.
+# If the robot sits directly on the table, set 0.0 and keep pegs 10-18 cm from the base.
+table_z: -0.05             # height of the table top in the base frame
+peg_height: 0.10           # ~10 cm tall pegs
+use_depth_height: true     # false -> use table_z + peg_height instead of measured top
+
+vision:
+  min_peg_area_px: 300
+  min_socket_area_px: 200
+  approx_eps_frac: 0.03    # approxPolyDP tolerance (fraction of perimeter)
+  top_band_m: 0.008        # keep peg pixels within 8 mm of the highest point (= top face)
+  fuse_merge_dist: 0.03    # sockets closer than this from the 2 cameras = same socket
+  rate_hz: 5.0
+
+grasp:
+  pregrasp_offset: 0.04    # hover this high above the peg top before going down
+  grasp_depth: 0.035       # grip this far below the peg top
+  settle_delay: 0.6        # s to wait after reaching the peg, before closing
+  close_delay: 1.0         # s to wait for the gripper to close
+  lift_clearance: 0.02     # peg bottom must be this far above the board when moving
+
+place:
+  hover_offset: 0.03       # hover this high above the socket before lowering
+  insert_depth: 0.02       # how deep the peg goes into the socket
+  descend_step: 0.005      # small Cartesian steps = "lower slowly"
+  descend_time_per_step: 0.15
+  release_delay: 0.8
+
+motion:
+  cartesian_step: 0.01     # max distance between IK points on a straight line
+  move_speed: 0.06         # m/s for normal Cartesian moves
+  min_segment_time: 0.6    # s, lower bound per trajectory
+  pitch_tolerance: 0.35    # rad the planner may tilt the gripper on TRANSIT moves only
+  home_joints: [0.0, -1.05, 0.35, 0.70]   # q1..q4 rad (safe pose, arm folded up)
+
+execution:
+  max_retries: 1
+  verify: true
+  verify_xy_tol: 0.015     # peg centre must be within this of the socket centre
+  verify_z_tol: 0.02       # peg top must be within this of (socket top + peg_height - insert_depth)
+  order: [triangle, square, hexagon, circle]   # hardest first while the board is empty
+
+robot:
+  backend: ros2_control    # ros2_control | omx_services | dry_run
+  joint_names: [joint1, joint2, joint3, joint4]
+  # ros2_control backend (open_manipulator Humble bringup)
+  arm_trajectory_topic: /arm_controller/joint_trajectory
+  gripper_action: /gripper_controller/gripper_cmd
+  joint_states_topic: /joint_states
+  gripper_open: 0.019      # finger position (m) — check your gripper's range
+  gripper_close: -0.010
+  gripper_max_effort: 5.0
+  # omx_services backend (older open_manipulator_x_controller)
+  joint_service: /goal_joint_space_path
+  tool_service: /goal_tool_control
