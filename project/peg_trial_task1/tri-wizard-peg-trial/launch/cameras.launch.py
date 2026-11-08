@@ -11,23 +11,43 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
     rs = os.path.join(get_package_share_directory("realsense2_camera"), "launch", "rs_launch.py")
-    out = [DeclareLaunchArgument("serial1", default_value=""), DeclareLaunchArgument("serial2", default_value="")]
-    for cam, serial in (("cam1", "serial1"), ("cam2", "serial2")):
-        out.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(rs), launch_arguments={
-            "camera_namespace": cam,
-            "camera_name": "camera",
-            "serial_no": LaunchConfiguration(serial),
-            "align_depth.enable": "true",          # depth pixels line up with colour pixels
-            "rgb_camera.color_profile": "640x480x30",
-            "depth_module.depth_profile": "640x480x30",
-            "spatial_filter.enable": "true",       # smoother depth
-            "temporal_filter.enable": "true",
-            "hole_filling_filter.enable": "true",
-        }.items()))
+    out = [
+        DeclareLaunchArgument("serial1", default_value=""),
+        DeclareLaunchArgument("serial2", default_value=""),
+        DeclareLaunchArgument("single", default_value="false", description="True to launch only cam1"),
+    ]
+
+    # cam1 (always launched)
+    out.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(rs), launch_arguments={
+        "camera_namespace": "cam1",
+        "camera_name": "camera",
+        "serial_no": LaunchConfiguration("serial1"),
+        "align_depth.enable": "true",
+        "rgb_camera.color_profile": "640x480x30",
+        "depth_module.depth_profile": "640x480x30",
+        "spatial_filter.enable": "true",
+        "temporal_filter.enable": "true",
+        "hole_filling_filter.enable": "true",
+    }.items()))
+
+    # cam2 (launched unless single:=true)
+    out.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(rs), launch_arguments={
+        "camera_namespace": "cam2",
+        "camera_name": "camera",
+        "serial_no": LaunchConfiguration("serial2"),
+        "align_depth.enable": "true",
+        "rgb_camera.color_profile": "640x480x30",
+        "depth_module.depth_profile": "640x480x30",
+        "spatial_filter.enable": "true",
+        "temporal_filter.enable": "true",
+        "hole_filling_filter.enable": "true",
+    }.items(), condition=UnlessCondition(LaunchConfiguration("single"))))
+
     return LaunchDescription(out)
