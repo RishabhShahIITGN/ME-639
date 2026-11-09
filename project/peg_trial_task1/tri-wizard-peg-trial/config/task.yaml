@@ -50,8 +50,8 @@ robot:
   arm_trajectory_topic: /arm_controller/joint_trajectory
   gripper_action: /gripper_controller/gripper_cmd
   joint_states_topic: /joint_states
-  gripper_open: 0.019      # finger position (m) — check your gripper's range
-  gripper_close: -0.010
+  gripper_open: -0.010      # open: negative position for this hardware
+  gripper_close: 0.019      # close: positive position for this hardware
   gripper_max_effort: 5.0
   # omx_services backend (older open_manipulator_x_controller)
   joint_service: /goal_joint_space_path

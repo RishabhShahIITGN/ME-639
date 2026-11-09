@@ -47,10 +47,12 @@ class ArmInterface:
             node.create_subscription(JointState, robot_cfg["joint_states_topic"], self._on_js, 10)
 
         if self.backend == "ros2_control":
-            from control_msgs.action import GripperCommand
+            from control_msgs.action import GripperCommand, FollowJointTrajectory
             from rclpy.action import ActionClient
             self._GripperCommand = GripperCommand
+            self._FollowJointTrajectory = FollowJointTrajectory
             self.traj_pub = node.create_publisher(JointTrajectory, robot_cfg["arm_trajectory_topic"], 10)
+            self.arm_client = ActionClient(node, FollowJointTrajectory, "/arm_controller/follow_joint_trajectory")
             self.grip_client = ActionClient(node, GripperCommand, robot_cfg["gripper_action"])
         elif self.backend == "omx_services":
             from open_manipulator_msgs.srv import SetJointPosition
@@ -89,20 +91,46 @@ class ArmInterface:
 
     # ---------------- arm ----------------
     def hold(self):
-        q = self.joints()
-        if q is None or self.backend == "dry_run":
-            return
-        if self.backend == "ros2_control":
-            self._publish_traj([(q, 0.2)])
-        else:
-            self._send_joint(q, 0.2)
+        try:
+            q = self.joints()
+            if q is None or self.backend == "dry_run":
+                return
+            if self.backend == "ros2_control":
+                self._publish_traj([(q, 0.2)])
+            else:
+                self._send_joint(q, 0.2)
+        except Exception:
+            pass
 
     def _publish_traj(self, points):
         msg = JointTrajectory()
+        msg.header.stamp = self.node.get_clock().now().to_msg()
         msg.joint_names = list(self.names)
+
+        q_curr = self.joints()
+        # Always prepend current state at t=0 with zero velocity so the splines controller has a valid baseline
+        if q_curr is not None:
+            p0 = JointTrajectoryPoint()
+            p0.positions = [float(a) for a in q_curr]
+            p0.velocities = [0.0] * len(self.names)
+            p0.time_from_start = Duration(sec=0, nanosec=0)
+            msg.points.append(p0)
+
         for q, t in points:
-            msg.points.append(JointTrajectoryPoint(positions=[float(a) for a in q], time_from_start=_dur(t)))
+            pt = JointTrajectoryPoint()
+            pt.positions = [float(a) for a in q]
+            pt.velocities = [0.0] * len(self.names)
+            pt.time_from_start = _dur(t)
+            msg.points.append(pt)
+
+        # 1. Publish to trajectory topic
         self.traj_pub.publish(msg)
+
+        # 2. Also send as Action Goal to ensure execution
+        if hasattr(self, "arm_client") and self.arm_client.server_is_ready():
+            goal = self._FollowJointTrajectory.Goal()
+            goal.trajectory = msg
+            self.arm_client.send_goal_async(goal)
 
     def _send_joint(self, q, t):
         req = self._SetJointPosition.Request()

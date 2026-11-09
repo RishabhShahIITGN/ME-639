@@ -23,25 +23,34 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, String
 
 from peg_trial.control.arm_interface import ESTOP_TOPIC, ArmInterface
-from peg_trial.planning.kinematics import IKError, Pose, fk, ik, interpolate_line
+from peg_trial.planning.kinematics import IKError, Pose, fk, ik, ik_best, interpolate_line, LIMITS
 from peg_trial.utils.config import load
 
 HELP = """
----------------- PEG TRIAL TELEOP ----------------
-  w / s : forward / back   (+x / -x)
-  a / d : left / right     (+y / -y)
-  r / f : up / down        (+z / -z)
-  [ / ] : smaller / bigger step   (now {step} mm)
-  o / c : gripper OPEN / CLOSE
-  g     : GRASP  = go down to grasp height of the peg below, settle, close
-  l     : LIFT   = straight up 6 cm
-  p     : PLACE  = lower slowly 3 cm, open, go up
-  1-4   : hover over detected peg   (1 tri, 2 square, 3 hex, 4 circle)
-  6-9   : hover over detected socket (6 tri, 7 square, 8 hex, 9 circle)
-  h     : HOME pose
-  SPACE : *** EMERGENCY STOP ***  (x = release e-stop)
-  ?     : this help         ESC / Ctrl-C : quit
----------------------------------------------------
+------------------- PEG TRIAL TELEOP -------------------
+  Cartesian Jogging:
+    w / s : forward / back   (+x / -x)
+    a / d : left / right     (+y / -y)
+    r / f : up / down        (+z / -z)
+    [ / ] : smaller / bigger step   (now {step} mm)
+
+  Direct Joint Nudging ({joint_step_deg}° per press):
+    q / e : Joint 1 (Base Yaw)   left / right
+    t / y : Joint 2 (Shoulder)   pitch up / down
+    u / i : Joint 3 (Elbow)      pitch up / down
+    j / k : Joint 4 (Wrist)      pitch up / down
+
+  Macros & Gripper:
+    o / c : gripper OPEN / CLOSE
+    g     : GRASP peg (descends, clamps)
+    l     : LIFT peg (+3.5 cm)
+    p     : PLACE peg (lowers, opens, retreats)
+    h     : HOME / READY pose (gripper down above peg)
+    1-4   : hover over detected peg (1 tri, 2 sq, 3 hex, 4 circ)
+    6-9   : hover over socket (6 tri, 7 sq, 8 hex, 9 circ)
+    SPACE : *** EMERGENCY STOP *** (x = release)
+    ?     : this help         ESC / Ctrl-C : quit
+--------------------------------------------------------
 """
 ORDER = ["triangle", "square", "hexagon", "circle"]
 
@@ -55,52 +64,48 @@ class Teleop(Node):
         self.create_subscription(String, "/peg_trial/scene", self._on_scene, 10)
         self.estop_pub = self.create_publisher(Bool, ESTOP_TOPIC, 10)
         self.step = 0.01
+        self.joint_step = 0.05   # ~2.9 degrees per tap
         self.target = None
 
     def _on_scene(self, m):
         self.scene = json.loads(m.data)
 
-    def current_pose(self):
-        if self.target is None:
-            q = self.arm.joints()
-            if q is None:
-                return Pose(0.16, 0.0, 0.08, math.pi / 2)
+    def current_pose(self) -> Pose:
+        q = self.arm.joints()
+        if q is not None:
             x, y, z, pitch = fk(q)
-            if z > 0.14 or abs(pitch - math.pi / 2) > 0.4:
-                self.target = Pose(0.16, 0.0, 0.08, math.pi / 2)
-            else:
-                self.target = Pose(x, y, z, math.pi / 2)
-        return self.target
+            return Pose(x, y, z, pitch)
+        if self.target is not None:
+            return self.target
+        return Pose(0.16, 0.0, 0.115, math.pi / 2)
 
     def go(self, pose: Pose, speed=0.04, line=True):
-        start = self.current_pose()
         q_start = self.arm.joints()
         if q_start is None:
             print("\r  ! no joint states from arm")
             return False
+        x_start, y_start, z_start, pitch_start = fk(q_start)
+        start = Pose(x_start, y_start, z_start, pitch_start)
 
-        # 1. Protect against base singularity and workspace limits
-        if pose.x < 0.08:
-            print(f"\r  ! too close to base (x={pose.x:.3f} < 0.08m)")
-            return False
-        if pose.x > 0.24:
-            print(f"\r  ! beyond maximum reach (x={pose.x:.3f} > 0.24m)")
-            return False
+        # 1. Protect against base center singularity and outer reach limits (full 360 deg workspace)
         r = math.hypot(pose.x - 0.012, pose.y)
-        if r < 0.10:
-            print(f"\r  ! radial distance too close to base (r={r:.3f} < 0.10m)")
+        if r < 0.09:
+            print(f"\r  ! too close to base pivot (r={r:.3f} < 0.09m)")
             return False
-        if r > 0.24:
-            print(f"\r  ! radial distance out of reach (r={r:.3f} > 0.24m)")
+        if r > 0.245:
+            print(f"\r  ! beyond maximum reach (r={r:.3f} > 0.245m)")
             return False
-        if pose.z < -0.07:
-            print(f"\r  ! table collision limit (z={pose.z:.3f} < -0.07m)")
+        # Table collision limit: based on physical table measured ~2cm below base
+        real_table_z = max(self.cfg.get("table_z", -0.05), -0.020)
+        min_safe_z = real_table_z + 0.035  # gripper center so finger tips never touch table
+        if pose.z < min_safe_z:
+            print(f"\r  ! table collision limit (z={pose.z:.3f} < {min_safe_z:.3f}m)")
             return False
         if pose.z > 0.22:
             print(f"\r  ! maximum height limit (z={pose.z:.3f} > 0.22m)")
             return False
 
-        # 2. Compute IK for path
+        # 2. Compute IK for path (try strict requested pitch first, fallback to small tolerance)
         try:
             if line:
                 poses = interpolate_line(start, pose, 0.01)
@@ -109,8 +114,16 @@ class Teleop(Node):
                 poses = [pose]
                 ik_points = [ik(pose)]
         except IKError as e:
-            print(f"\r  ! unreachable: {e}")
-            return False
+            try:
+                if line:
+                    poses = interpolate_line(start, pose, 0.01)
+                    ik_points = [ik_best(p, pitch_tolerance=0.15) for p in poses]
+                else:
+                    poses = [pose]
+                    ik_points = [ik_best(pose, pitch_tolerance=0.15)]
+            except IKError:
+                print(f"\r  ! unreachable: {e}")
+                return False
 
         # 3. Detect sudden angle jumps (e.g. crossing branch cuts or singularities)
         MAX_SAFE_STEP = 0.40  # rad (~23 deg) per Cartesian step
@@ -148,6 +161,16 @@ class Teleop(Node):
         s = self.step
         g = self.cfg["grasp"]
         moves = {"w": (s, 0, 0), "s": (-s, 0, 0), "a": (0, s, 0), "d": (0, -s, 0), "r": (0, 0, s), "f": (0, 0, -s)}
+        joint_moves = {
+            "q": (0, +self.joint_step, "Joint 1 (Base Yaw) +left"),
+            "e": (0, -self.joint_step, "Joint 1 (Base Yaw) -right"),
+            "t": (1, -self.joint_step, "Joint 2 (Shoulder) up"),
+            "y": (1, +self.joint_step, "Joint 2 (Shoulder) down"),
+            "u": (2, -self.joint_step, "Joint 3 (Elbow) up"),
+            "i": (2, +self.joint_step, "Joint 3 (Elbow) down"),
+            "j": (3, -self.joint_step, "Joint 4 (Wrist) tilt up"),
+            "k": (3, +self.joint_step, "Joint 4 (Wrist) tilt down"),
+        }
         if k == " ":
             self.estop_pub.publish(Bool(data=True))
             print("\r  *** E-STOP *** (press x to release)")
@@ -158,7 +181,26 @@ class Teleop(Node):
             print("\r  e-stop active — press x first")
         elif k in moves:
             dx, dy, dz = moves[k]
-            self.go(Pose(p.x + dx, p.y + dy, p.z + dz), line=False if s >= 0.02 else True)
+            target_pitch = p.pitch if abs(p.pitch - math.pi / 2) < 0.3 else math.pi / 2
+            self.go(Pose(p.x + dx, p.y + dy, p.z + dz, target_pitch), line=False if s >= 0.02 else True)
+        elif k in joint_moves:
+            idx, dq, name = joint_moves[k]
+            q_now = self.arm.joints()
+            if q_now is None:
+                print("\r  ! no joint states from arm")
+                return
+            new_q = list(q_now)
+            target_val = new_q[idx] + dq
+            lo, hi = LIMITS[idx]
+            if not (lo <= target_val <= hi):
+                print(f"\r  ! {name} limit reached ({target_val:.2f} rad not in [{lo:.2f}, {hi:.2f}])")
+                return
+            new_q[idx] = target_val
+            t = max(0.35, abs(dq) / 0.5)
+            self.arm.move([(new_q, t)], settle=0.05)
+            self.target = None
+            x, y, z, pitch = fk(new_q)
+            print(f"\r  {name}: {target_val:.2f} rad ({target_val*180/math.pi:.1f}°) -> (x={x:.3f}, y={y:.3f}, z={z:.3f})")
         elif k in "[]":
             self.step = max(0.002, self.step / 2) if k == "[" else min(0.05, self.step * 2)
             print(f"\r  step = {self.step * 1000:.0f} mm")
@@ -167,17 +209,47 @@ class Teleop(Node):
         elif k == "c":
             self.arm.gripper("close")
         elif k == "g":
-            peg = min(self.scene["pegs"], key=lambda q: math.hypot(q["x"] - p.x, q["y"] - p.y), default=None)
-            z = (peg["z_top"] if peg else p.z - g["pregrasp_offset"]) - g["grasp_depth"]
-            if self.go(Pose(p.x, p.y, z), speed=0.03):
-                time.sleep(g["settle_delay"])
-                self.arm.gripper("close", wait=g["close_delay"])
+            q_now = self.arm.joints()
+            if q_now is None:
+                print("\r  ! no joint states from arm")
+                return
+            x_now, y_now, z_now, pitch_now = fk(q_now)
+            pitch_grasp = pitch_now if abs(pitch_now - math.pi / 2) < 0.3 else math.pi / 2
+
+            real_table_z = max(self.cfg.get("table_z", -0.05), -0.020)
+            peg = min(self.scene["pegs"], key=lambda q: math.hypot(q["x"] - x_now, q["y"] - y_now), default=None)
+            if peg:
+                top_z = peg["z_top"]
+            else:
+                top_z = real_table_z + self.cfg.get("peg_height", 0.10)
+            # Firm grasp: grip 2.5 cm below peg top for deep, tight hold
+            z_grasp = max(top_z - 0.025, real_table_z + 0.035)
+
+            self.arm.gripper("open")
+            # If above grasp depth, descend straight down at exact current (x, y)
+            if z_now > z_grasp + 0.005:
+                print(f"\r  descending vertically to peg (z={z_grasp:.3f}m) ...")
+                self.go(Pose(x_now, y_now, z_grasp, pitch_grasp), speed=0.025)
+
+            time.sleep(g["settle_delay"])
+            print("\r  clamping peg ...")
+            self.arm.gripper("close", wait=g["close_delay"])
         elif k == "l":
-            self.go(Pose(p.x, p.y, p.z + 0.06), speed=0.03)
+            q_now = self.arm.joints()
+            if q_now is not None:
+                x_now, y_now, z_now, pitch_now = fk(q_now)
+                pitch_lift = pitch_now if abs(pitch_now - math.pi / 2) < 0.3 else math.pi / 2
+                self.go(Pose(x_now, y_now, z_now + 0.035, pitch_lift), speed=0.03)
         elif k == "p":
-            if self.go(Pose(p.x, p.y, p.z - 0.03), speed=0.015):
-                self.arm.gripper("open")
-                self.go(Pose(p.x, p.y, p.z + 0.03), speed=0.03)
+            print("\r  placing peg into socket ...")
+            q_now = self.arm.joints()
+            if q_now is not None:
+                x_now, y_now, z_now, pitch_now = fk(q_now)
+                pitch_place = pitch_now if abs(pitch_now - math.pi / 2) < 0.3 else math.pi / 2
+                if self.go(Pose(x_now, y_now, z_now - 0.025, pitch_place), speed=0.015):
+                    self.arm.gripper("open")
+                    time.sleep(self.cfg["place"].get("release_delay", 0.8))
+                    self.go(Pose(x_now, y_now, z_now + 0.040, pitch_place), speed=0.03)
         elif k in "1234" or k in "6789":
             shape = ORDER["1234".index(k)] if k in "1234" else ORDER["6789".index(k)]
             items = self.scene["pegs"] if k in "1234" else self.scene["sockets"]
@@ -189,15 +261,15 @@ class Teleop(Node):
             self.go(Pose(it["x"], it["y"], z), line=False)
         elif k == "h":
             self.target = None
-            q_now = self.arm.joints() or [0.0, 0.0, 0.0, 1.5708]
-            ready_joints = [0.0, 0.0, 0.0, 1.5708]
+            q_now = self.arm.joints() or [0.0, 0.046, -0.355, 1.880]
+            ready_joints = [0.0, 0.046, -0.355, 1.880]  # z = 0.115m (above 10cm peg)
             max_d = max(abs(a - b) for a, b in zip(q_now, ready_joints))
             t_home = max(3.0, max_d / 0.6)
-            print(f"\r  moving to ready pose (gripper down) in {t_home:.1f}s ...")
+            print(f"\r  moving to ready pose (z=0.115m, clears pegs) in {t_home:.1f}s ...")
             self.arm.move([(ready_joints, t_home)], settle=0.2)
-            self.target = Pose(0.16, 0.0, 0.08, math.pi / 2)
+            self.target = Pose(0.16, 0.0, 0.115, math.pi / 2)
         elif k == "?":
-            print(HELP.format(step=int(self.step * 1000)))
+            print(HELP.format(step=int(self.step * 1000), joint_step_deg=round(self.joint_step * 180 / math.pi, 1)))
 
 
 def main():
@@ -209,7 +281,7 @@ def main():
     if not node.arm.wait_for_joints(10.0):
         print("no /joint_states — start the robot bringup first")
         return
-    print(HELP.format(step=int(node.step * 1000)))
+    print(HELP.format(step=int(node.step * 1000), joint_step_deg=round(node.joint_step * 180 / math.pi, 1)))
     old = termios.tcgetattr(sys.stdin)
     worker = None
     try:
