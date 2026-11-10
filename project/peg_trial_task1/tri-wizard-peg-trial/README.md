@@ -62,7 +62,7 @@ python3 scripts/workspace_check.py                   # where the robot can reach
 | Robot (real, U2D2) | `ros2 launch open_manipulator_x_bringup hardware.launch.py` |
 | Robot (real, OpenCR) | `ros2 launch open_manipulator_x_bringup hardware.launch.py port_name:=/dev/ttyACM0` |
 | Robot (Gazebo) | `ros2 launch open_manipulator_x_bringup gazebo.launch.py` |
-| Both cameras | `ros2 launch peg_trial cameras.launch.py serial1:=_123456789 serial2:=_987654321` (replace with camera serials; keep the leading `_`) |
+| Both cameras | `ros2 launch peg_trial cameras.launch.py serial1:=_<SN1> serial2:=_<SN2>` |
 | **Full autonomy** | `./launch/run_autonomy.sh` (= `ros2 launch peg_trial autonomy.launch.py` + evaluation) |
 | Autonomy, no robot | `./launch/run_autonomy.sh dry_run` |
 | **Teleop** | `./launch/run_teleop.sh` (vision in background + keyboard in this terminal) |
@@ -99,19 +99,13 @@ Tune colours: `python3 scripts/tune_hsv.py --image data/cam1_color.png` (sliders
 ## 5. Usage
 
 ### Teleoperation (keyboard)
-Run `./launch/run_teleop.sh` in its own interactive terminal after starting the robot and cameras. It starts vision for the detected-object shortcuts and then opens the keyboard controller.
-
 ```
-w/s  forward/back   a/d  left/right   r/f  up/down
-[ ]  halve/double step size (starts at 10 mm; limited to 2–50 mm)
+w/s  forward/back   a/d  left/right   r/f  up/down   [ ]  step size
 o/c  open/close     g    grasp (down + settle + close)   l  lift 6 cm   p  place (lower slowly + open)
 1-4  hover over detected peg (tri, square, hex, circle)   6-9  hover over socket (same order)
-h    teleop ready pose   ?  show help   SPACE  EMERGENCY STOP   x  release e-stop   ESC/Ctrl-C  quit
+h    home           SPACE  EMERGENCY STOP   x  release e-stop   ESC  quit
 ```
-
-The gripper stays pointed down. Cartesian moves use the robot base frame; `g` descends at the current x/y to the nearest detected peg's grasp height. `p` lowers 3 cm, opens the gripper, then raises 3 cm. Teleop rejects targets outside `x = 0.08–0.24 m`, radial distance `0.10–0.24 m`, or `z = -0.07–0.22 m`, and rejects large IK joint changes. These software limits are not a substitute for supervision or the hardware stop.
-
-Typical cycle: `1` → `g` → `l` → `6` → `f` (down toward the socket) → `p`. The teleop `h` key moves to its ready pose; the autonomous planner's separate home pose is configured by `motion.home_joints` in `config/task.yaml`.
+Typical cycle: `1` → `g` → `l` → `6` → `f` (down to just above the socket) → `p`.
 
 ### Autonomous
 1. Robot bringup + cameras running, board **empty**, pegs standing upright in the reachable ring (`workspace_check.py`).
@@ -122,7 +116,6 @@ Typical cycle: `1` → `g` → `l` → `6` → `f` (down toward the socket) → 
 
 * **SPACE** in the teleop terminal → publishes `true` on `/peg_trial/estop` → every node commands the arm to hold its current position and aborts the motion.
 * From any terminal: `ros2 topic pub --once /peg_trial/estop std_msgs/msg/Bool "{data: true}"` (release with `false`).
-* In teleop, press **x** to release the e-stop; do not resume until the workspace is clear and the arm is safe to move.
 * `Ctrl+C` on the autonomy terminal also sends a hold command.
 * **Hardware stop:** keep a hand on the U2D2 power hub / OpenCR power switch — cutting power drops torque (the arm will sag: keep it over the table).
 * Before power-on put the arm in the ROBOTIS recommended start pose; first run every new setup with `dry_run`, then at reduced `motion.move_speed`.

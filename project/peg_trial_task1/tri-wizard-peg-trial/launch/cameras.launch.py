@@ -19,9 +19,9 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     rs = os.path.join(get_package_share_directory("realsense2_camera"), "launch", "rs_launch.py")
     out = [
-        DeclareLaunchArgument("serial1", default_value=""),
+        DeclareLaunchArgument("serial1", default_value="_332322071822"),
         DeclareLaunchArgument("serial2", default_value=""),
-        DeclareLaunchArgument("single", default_value="false", description="True to launch only cam1"),
+        DeclareLaunchArgument("single", default_value="true", description="True to launch only cam1"),
     ]
 
     # cam1 (always launched)

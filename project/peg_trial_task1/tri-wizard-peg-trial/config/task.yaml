@@ -3,8 +3,8 @@
 # OMX reach is SHORT for 10 cm pegs with a straight-down gripper (max ~0.13 m high).
 # Best fix: put the robot on a 5 cm riser -> table is 5 cm BELOW the base -> table_z = -0.05.
 # If the robot sits directly on the table, set 0.0 and keep pegs 10-18 cm from the base.
-table_z: -0.05             # height of the table top in the base frame
-peg_height: 0.10           # ~10 cm tall pegs
+table_z: 0.00              # height of the table top in the base frame
+peg_height: 0.098           # 98 mm tall pegs
 use_depth_height: true     # false -> use table_z + peg_height instead of measured top
 
 vision:
@@ -16,14 +16,14 @@ vision:
   rate_hz: 5.0
 
 grasp:
-  pregrasp_offset: 0.04    # hover this high above the peg top before going down
+  pregrasp_offset: 0.015   # hover 1.5 cm above peg top (keeps within vertical reach)
   grasp_depth: 0.035       # grip this far below the peg top
   settle_delay: 0.6        # s to wait after reaching the peg, before closing
   close_delay: 1.0         # s to wait for the gripper to close
-  lift_clearance: 0.02     # peg bottom must be this far above the board when moving
+  lift_clearance: 0.015    # peg bottom clearance above board when moving
 
 place:
-  hover_offset: 0.03       # hover this high above the socket before lowering
+  hover_offset: 0.015      # hover 1.5 cm above the socket before lowering
   insert_depth: 0.02       # how deep the peg goes into the socket
   descend_step: 0.005      # small Cartesian steps = "lower slowly"
   descend_time_per_step: 0.15

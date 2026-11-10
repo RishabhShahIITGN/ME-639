@@ -132,8 +132,8 @@ def process_frame(bgr, depth_m, K, T_base_cam, colors_cfg, task_cfg, cam_name="c
         det = footprint_shape(top_pts[:, :2], eps)
         if det is None:
             continue
-        if not task_cfg.get("use_depth_height", True):
-            z_top = task_cfg["table_z"] + task_cfg["peg_height"]
+        if not task_cfg.get("use_depth_height", True) or z_top < 0.04:
+            z_top = task_cfg["table_z"] + task_cfg.get("peg_height", 0.098)
         fixed = colors_cfg["pegs"][color].get("shape")
         det.update(color=color, seen_shape=det["shape"], shape=fixed or det["shape"], z_top=z_top,
                    cam=cam_name, view=view)

@@ -79,6 +79,7 @@ def plan_pick_place(peg, sock, cfg, start_q=None):
     step, speed, min_t = mo["cartesian_step"], mo["move_speed"], mo["min_segment_time"]
     home = mo["home_joints"]
     start_q = start_q or home
+    pitch_tol = mo.get("pitch_tolerance", 0.20)
 
     peg_h = max(0.03, peg["z_top"] - cfg["table_z"])          # measured peg height
     below_tcp = peg_h - g["grasp_depth"]                       # gripper centre -> peg bottom
@@ -91,40 +92,41 @@ def plan_pick_place(peg, sock, cfg, start_q=None):
     above_sock = Pose(sock["x"], sock["y"], max(lift_z, hover.z), DOWN)
     final = Pose(sock["x"], sock["y"], sock["z_top"] - pl["insert_depth"] + below_tcp, DOWN)
 
-    # quick reachability check of every key pose (gives a clear error message)
+    # quick reachability check of every key pose (using realistic pitch tolerance)
     for name, p in (("pre-grasp", pre), ("grasp", grasp), ("hover", hover), ("insert", final)):
         try:
-            ik(p)
+            ik_best(p, pitch_tol)
         except IKError as e:
             raise PlanError(f"{name} pose ({p.x:.3f},{p.y:.3f},{p.z:.3f}) unreachable: {e}") from e
 
     steps = []
-    q_pre = ik(pre)
+    q_pre = ik_best(pre, pitch_tol)
     steps.append({"type": "gripper", "name": "open", "cmd": "open"})
     steps.append({"type": "move", "name": "to_pregrasp", "points": [(q_pre, _joint_time(start_q, q_pre))]})
-    steps.append({"type": "move", "name": "approach", "points": _line(pre, grasp, step, speed / 2, min_t, 0.0)})
+    steps.append({"type": "move", "name": "approach", "points": _line(pre, grasp, step, speed / 2, min_t, 0.0, False, pitch_tol)})
     steps.append({"type": "wait", "name": "settle", "sec": g["settle_delay"]})
     steps.append({"type": "gripper", "name": "close", "cmd": "close"})
     steps.append({"type": "wait", "name": "grip", "sec": g["close_delay"]})
-    steps.append({"type": "move", "name": "lift", "points": _line(grasp, lift, step, speed / 2, min_t, 0.0, False, mo["pitch_tolerance"])})
+    steps.append({"type": "move", "name": "lift", "points": _line(grasp, lift, step, speed / 2, min_t, 0.0, False, pitch_tol)})
 
     # transit: go up/over in joint space (fast), ending exactly above the socket
     q_lift = steps[-1]["points"][-1][0]
-    q_above = ik_best(above_sock, mo["pitch_tolerance"])
+    q_above = ik_best(above_sock, pitch_tol)
     steps.append({"type": "move", "name": "transit", "points": [(q_above, _joint_time(q_lift, q_above))]})
     a = Pose(*fk(q_above))
-    steps.append({"type": "move", "name": "to_hover", "points": _line(a, hover, step, speed / 2, min_t, 0.0)})
+    steps.append({"type": "move", "name": "to_hover", "points": _line(a, hover, step, speed / 2, min_t, 0.0, False, pitch_tol)})
 
     # insert: tiny steps, slow
     ins, t = [], 0.0
     for p in interpolate_line(hover, final, pl["descend_step"]):
         t += pl["descend_time_per_step"]
-        ins.append((ik(p), t))
+        ins.append((ik_best(p, pitch_tol), t))
     steps.append({"type": "move", "name": "insert", "points": ins})
     steps.append({"type": "gripper", "name": "release", "cmd": "open"})
     steps.append({"type": "wait", "name": "release_wait", "sec": pl["release_delay"]})
-    steps.append({"type": "move", "name": "retreat", "points": _line(final, hover, step, speed / 2, min_t, 0.0)})
-    steps.append({"type": "move", "name": "home", "points": [(home, _joint_time(ik(hover), home))]})
+    steps.append({"type": "move", "name": "retreat", "points": _line(final, hover, step, speed / 2, min_t, 0.0, False, pitch_tol)})
+    q_hover = ik_best(hover, pitch_tol)
+    steps.append({"type": "move", "name": "home", "points": [(home, _joint_time(q_hover, home))]})
 
     info = {"yaw_error_deg": math.degrees(yaw_error(peg, sock, SHAPE_SYM.get(peg["shape"], 0))),
             "peg_height": peg_h}

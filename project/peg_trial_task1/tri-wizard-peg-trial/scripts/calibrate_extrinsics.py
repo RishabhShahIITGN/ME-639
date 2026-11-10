@@ -33,19 +33,22 @@ def main():
     ap.add_argument("--y", type=float)
     ap.add_argument("--z", type=float, default=0.0)
     ap.add_argument("--id", type=int, default=0)
+    ap.add_argument("--dict", default="DICT_4X4_50", help="ArUco dictionary name")
     ap.add_argument("--data", default="data")
     ap.add_argument("--calib", default=os.path.join(ROOT, "config", "camera_calib.yaml"))
     a = ap.parse_args()
 
     if a.make_marker:
-        img = cv2.copyMakeBorder(marker_image(a.id, 600), 60, 60, 60, 60, cv2.BORDER_CONSTANT, value=255)
+        img = cv2.copyMakeBorder(marker_image(a.id, 600, a.dict), 60, 60, 60, 60, cv2.BORDER_CONSTANT, value=255)
         cv2.imwrite(f"marker_{a.id}.png", img)
         print(f"wrote marker_{a.id}.png")
         return
 
     bgr = cv2.imread(os.path.join(a.data, f"{a.camera}_color.png"))
+    if bgr is None:
+        raise FileNotFoundError(f"Could not load image: {os.path.join(a.data, f'{a.camera}_color.png')}. Run save_frames.py first!")
     K = np.load(os.path.join(a.data, f"{a.camera}_K.npy"))
-    T, err = solve_T_base_cam(bgr, K, a.size, a.x, a.y, a.z, a.id)
+    T, err = solve_T_base_cam(bgr, K, a.size, a.x, a.y, a.z, a.id, dict_name=a.dict)
     print(f"reprojection error: {err:.2f} px  (good: < 1 px)")
     print(f"camera position in base frame: {np.round(T[:3, 3], 3).tolist()} m")
     print(np.round(T, 4))

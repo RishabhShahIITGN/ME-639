@@ -8,6 +8,10 @@ the printed [[h,s,v],[h,s,v]] into config/colors.yaml. Press q to quit.
 Tip: click on a pixel in the "image" window to print its HSV value.
 """
 import argparse
+import os
+
+os.environ["GDK_BACKEND"] = "x11"
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import cv2
 import numpy as np
