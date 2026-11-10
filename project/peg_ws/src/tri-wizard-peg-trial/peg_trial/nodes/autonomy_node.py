@@ -65,9 +65,9 @@ class AutonomyNode(Node):
                 return False
         return True
 
-    def fresh_snapshot(self):
+    def fresh_snapshot(self, expected_sockets=0):
         self.scenes.clear()
-        return self.scenes.snapshot(min_frames=6, timeout=6.0)
+        return self.scenes.snapshot(min_frames=6, timeout=6.0, expected_sockets=expected_sockets)
 
     def verify(self, color, sock, peg_h) -> tuple[bool, str]:
         ex = self.cfg["execution"]
@@ -103,7 +103,7 @@ class AutonomyNode(Node):
         self.arm.gripper("open")
         self.arm.move([(self.cfg["motion"]["home_joints"], 3.0)])
 
-        snap = self.fresh_snapshot()
+        snap = self.fresh_snapshot(expected_sockets=4)
         if snap is None or not snap["sockets"]:
             self.get_logger().error("no sockets detected — check board HSV / camera calibration")
             return
@@ -132,7 +132,8 @@ class AutonomyNode(Node):
                 self.say(f"[{idx + 1}/{len(pairs)}] {color} {peg['shape']} -> socket at "
                          f"({sock['x']:.3f},{sock['y']:.3f})  attempt {attempts}")
                 try:
-                    steps, info = plan_pick_place(peg, sock, self.cfg, self.arm.joints())
+                    other_pegs = [p for p in snap["pegs"] if p["color"] != color]
+                    steps, info = plan_pick_place(peg, sock, self.cfg, self.arm.joints(), obstacles=other_pegs)
                 except PlanError as e:
                     note = str(e)
                     self.get_logger().error(note)
@@ -146,7 +147,7 @@ class AutonomyNode(Node):
                 if not self.run_steps(steps):
                     note = "aborted (e-stop)"
                     break
-                if ex.get("verify", True):
+                if ex.get("verify", True) and self.cfg["robot"]["backend"] != "dry_run":
                     ok, note = self.verify(color, sock, info["peg_height"])
                     self.say(f"verify {color}: {'OK' if ok else 'FAIL'} {note}")
                 else:

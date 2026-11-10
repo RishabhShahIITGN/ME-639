@@ -67,18 +67,20 @@ class SceneBuffer:
         with self.lock:
             self.buf.clear()
 
-    def snapshot(self, min_frames=5, timeout=5.0, max_age=2.0):
+    def snapshot(self, min_frames=5, timeout=5.0, max_age=2.0, expected_sockets=4):
         """Wait until `min_frames` fresh scenes exist, return a median scene (or None)."""
         t0 = time.time()
+        last_scene = None
         while time.time() - t0 < timeout:
             with self.lock:
                 fresh = [s for t, s in self.buf if time.time() - t < max_age]
             if len(fresh) >= min_frames:
                 pegs = [p for s in fresh for p in s["pegs"]]
                 socks = [s_ for s in fresh for s_ in s["sockets"]]
-                return {
-                    "pegs": [p for p in _stable(pegs, lambda p: p["color"]) if p["n"] >= min_frames // 2],
-                    "sockets": [s for s in _stable(socks, _socket_key(socks)) if s["n"] >= min_frames // 2],
-                }
+                stable_pegs = [p for p in _stable(pegs, lambda p: p["color"]) if p["n"] >= min_frames // 2]
+                stable_socks = [s for s in _stable(socks, _socket_key(socks)) if s["n"] >= min_frames // 2]
+                last_scene = {"pegs": stable_pegs, "sockets": stable_socks}
+                if len(stable_socks) >= expected_sockets:
+                    return last_scene
             time.sleep(0.05)
-        return None
+        return last_scene

@@ -4,7 +4,7 @@
 # Best fix: put the robot on a 5 cm riser -> table is 5 cm BELOW the base -> table_z = -0.05.
 # If the robot sits directly on the table, set 0.0 and keep pegs 10-18 cm from the base.
 table_z: 0.00              # height of the table top in the base frame
-peg_height: 0.098           # 98 mm tall pegs
+peg_height: 0.097           # 97 mm tall pegs
 use_depth_height: true     # false -> use table_z + peg_height instead of measured top
 
 vision:
@@ -16,11 +16,11 @@ vision:
   rate_hz: 5.0
 
 grasp:
-  pregrasp_offset: 0.015   # hover 1.5 cm above peg top (keeps within vertical reach)
-  grasp_depth: 0.035       # grip this far below the peg top
+  pregrasp_offset: 0.020   # hover 2.0 cm above peg top (keeps within vertical reach)
+  grasp_depth: 0.052       # grip 52 mm below top (~mid-body of 97mm peg for secure hold)
   settle_delay: 0.6        # s to wait after reaching the peg, before closing
   close_delay: 1.0         # s to wait for the gripper to close
-  lift_clearance: 0.015    # peg bottom clearance above board when moving
+  lift_clearance: 0.030    # peg bottom clearance above board when moving (30mm)
 
 place:
   hover_offset: 0.015      # hover 1.5 cm above the socket before lowering

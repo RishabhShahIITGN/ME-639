@@ -10,19 +10,19 @@ morphology:
   close: 7     # kernel px — fills small holes
 
 pegs:
-  red:                         # our physical orange peg (hexagon)
-    hsv: [[[0, 100, 70], [16, 255, 255]], [[170, 100, 70], [179, 255, 255]]]
+  orange:                      # physical orange peg (hexagon)
+    hsv: [[[4, 150, 90], [16, 255, 255]]]
     shape: "hexagon"
-  green:
-    hsv: [[[34, 55, 40], [85, 255, 255]]]
+  yellow:                      # physical bright yellow peg (triangle)
+    hsv: [[[18, 120, 70], [28, 255, 255]]]
+    shape: "triangle"
+  green:                       # physical lime green cylinder (circle)
+    hsv: [[[31, 100, 40], [85, 255, 255]]]
     shape: "circle"
-  blue:
+  blue:                        # physical blue square peg (square)
     hsv: [[[95, 100, 50], [130, 255, 255]]]
     shape: "square"
-  yellow:
-    hsv: [[[18, 100, 80], [38, 255, 255]]]
-    shape: "triangle"
 
-# Colour of the socket board (handles both cardboard and white board)
+# Colour of the socket board (cardboard / MDF board)
 board:
-  hsv: [[[10, 20, 70], [35, 170, 195]], [[0, 0, 160], [179, 40, 255]]]
+  hsv: [[[10, 20, 70], [35, 170, 195]]]

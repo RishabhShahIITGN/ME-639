@@ -136,7 +136,7 @@ def process_frame(bgr, depth_m, K, T_base_cam, colors_cfg, task_cfg, cam_name="c
             z_top = task_cfg["table_z"] + task_cfg.get("peg_height", 0.098)
         fixed = colors_cfg["pegs"][color].get("shape")
         det.update(color=color, seen_shape=det["shape"], shape=fixed or det["shape"], z_top=z_top,
-                   cam=cam_name, view=view)
+                   cam=cam_name, view=view, contour=contour)
         result["pegs"].append(det)
 
     # ---------- sockets ----------
@@ -147,13 +147,14 @@ def process_frame(bgr, depth_m, K, T_base_cam, colors_cfg, task_cfg, cam_name="c
             ring = cv2.bitwise_and(ring_mask(board_mask.shape, h), board_mask)
             vs, us = np.nonzero(ring)
             pts, _, _ = pixels_to_base(us, vs, depth_m, K, T)
-            if len(pts) < 10:
-                continue
-            z_board = float(np.median(pts[:, 2]))
+            if len(pts) >= 10:
+                z_board = float(np.median(pts[:, 2]))
+            else:
+                z_board = float(task_cfg.get("table_z", 0.0))
             det = metric_shape(h, z_board, K, T, eps)
             if det is None:
                 continue
-            det.update(z_top=z_board, cam=cam_name, view=view)
+            det.update(z_top=z_board, cam=cam_name, view=view, contour=h)
             result["sockets"].append(det)
     return result
 
@@ -178,6 +179,7 @@ def _merge(items):
     out["yaw"] = _avg_angle([a for a, _ in same], [b for _, b in same], SYMMETRY[out["shape"]])
     out["conf"] = float(max(i["conf"] for i in items))
     out["cam"] = "+".join(sorted({i["cam"] for i in items}))
+    out.pop("contour", None)
     return out
 
 
@@ -206,17 +208,51 @@ def fuse(results, merge_dist=0.03):
 
 
 def draw(bgr, result, K, T_base_cam):
-    """Debug overlay: project detections back into the image."""
+    """Debug overlay: draw high-contrast contour boundaries and 3D labels."""
     img = bgr.copy()
     T_cam_base = np.linalg.inv(np.asarray(T_base_cam))
     fx, fy, cx, cy = K[0][0], K[1][1], K[0][2], K[1][2]
-    for kind, colr in (("pegs", (0, 255, 0)), ("sockets", (255, 0, 255))):
-        for d in result[kind]:
-            p = T_cam_base @ np.array([d["x"], d["y"], d["z_top"], 1.0])
-            if p[2] <= 0:
-                continue
-            u, v = int(fx * p[0] / p[2] + cx), int(fy * p[1] / p[2] + cy)
+
+    COLOR_MAP = {
+        "orange": (0, 140, 255),    # BGR orange
+        "red":    (0, 140, 255),    # BGR orange
+        "green":  (0, 255, 0),      # BGR green
+        "blue":   (255, 120, 0),    # BGR sky blue
+        "yellow": (0, 255, 255),    # BGR yellow
+    }
+
+    # 1. Draw Pegs with their individual colors and boundaries
+    for p in result.get("pegs", []):
+        colr = COLOR_MAP.get(p.get("color"), (0, 255, 0))
+        if "contour" in p and p["contour"] is not None:
+            cv2.drawContours(img, [p["contour"]], -1, colr, 2)
+        
+        pt = T_cam_base @ np.array([p["x"], p["y"], p["z_top"], 1.0])
+        if pt[2] > 0:
+            u, v = int(fx * pt[0] / pt[2] + cx), int(fy * pt[1] / pt[2] + cy)
+            cv2.circle(img, (u, v), 5, (0, 0, 255), -1)
+            r_dist = math.hypot(p["x"] - 0.012, p["y"])
+            tag = f"{p.get('color', '').upper()} {p['shape']} ({r_dist*100:.1f}cm)"
+            cv2.putText(img, tag, (u - 40, v - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(img, tag, (u - 40, v - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, colr, 1, cv2.LINE_AA)
+
+    # 2. Draw Sockets with magenta/cyan outlines and reachability warnings
+    for s in result.get("sockets", []):
+        r_dist = math.hypot(s["x"] - 0.012, s["y"])
+        is_reachable = (r_dist <= 0.245)
+        # Cyan if reachable, bright red if too far
+        colr = (255, 255, 0) if is_reachable else (0, 0, 255)
+        
+        if "contour" in s and s["contour"] is not None:
+            cv2.drawContours(img, [s["contour"]], -1, colr, 2)
+        
+        pt = T_cam_base @ np.array([s["x"], s["y"], s["z_top"], 1.0])
+        if pt[2] > 0:
+            u, v = int(fx * pt[0] / pt[2] + cx), int(fy * pt[1] / pt[2] + cy)
             cv2.circle(img, (u, v), 5, colr, -1)
-            label = f'{d.get("color", "S")}:{d["shape"]}'
-            cv2.putText(img, label, (u + 6, v - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, colr, 1, cv2.LINE_AA)
+            status = "OK" if is_reachable else "TOO FAR!"
+            tag = f"SOCKET: {s['shape']} ({r_dist*100:.1f}cm - {status})"
+            cv2.putText(img, tag, (u - 50, v + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(img, tag, (u - 50, v + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, colr, 1, cv2.LINE_AA)
+
     return img

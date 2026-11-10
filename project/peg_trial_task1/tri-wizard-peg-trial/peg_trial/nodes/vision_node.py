@@ -79,7 +79,15 @@ class VisionNode(Node):
             return
         scene = fuse(results, self.task["vision"].get("fuse_merge_dist", 0.03))
         scene["stamp"] = self.get_clock().now().nanoseconds * 1e-9
-        self.pub.publish(String(data=json.dumps(scene)))
+
+        def _json_serialize(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, (np.floating, np.integer)):
+                return obj.item()
+            return str(obj)
+
+        self.pub.publish(String(data=json.dumps(scene, default=_json_serialize)))
 
 
 def main():

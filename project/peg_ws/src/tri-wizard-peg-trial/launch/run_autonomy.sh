@@ -7,5 +7,9 @@ cd "$(dirname "$0")/.."
 source /opt/ros/humble/setup.bash
 source ../../install/setup.bash 2>/dev/null || source install/setup.bash
 mkdir -p logs
-ros2 launch peg_trial autonomy.launch.py backend:="${1:-}" log_dir:="$(pwd)/logs"
+if [ -n "$1" ]; then
+    ros2 launch peg_trial autonomy.launch.py backend:="$1" log_dir:="$(pwd)/logs"
+else
+    ros2 launch peg_trial autonomy.launch.py log_dir:="$(pwd)/logs"
+fi
 python3 scripts/evaluate_timing.py --log-dir logs --last 1

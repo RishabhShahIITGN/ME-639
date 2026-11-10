@@ -74,7 +74,20 @@ def _line(p0, p1, step, speed, min_t, t0, strict=True, pitch_tol=0.0):
     return pts
 
 
-def plan_pick_place(peg, sock, cfg, start_q=None):
+def dist_to_segment(p, a, b):
+    """Distance from 2D point p=(px, py) to line segment a=(ax, ay) -> b=(bx, by)."""
+    px, py = p
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    if l2 <= 1e-9:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / l2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def plan_pick_place(peg, sock, cfg, start_q=None, obstacles=None):
     g, pl, mo = cfg["grasp"], cfg["place"], cfg["motion"]
     step, speed, min_t = mo["cartesian_step"], mo["move_speed"], mo["min_segment_time"]
     home = mo["home_joints"]
@@ -109,10 +122,41 @@ def plan_pick_place(peg, sock, cfg, start_q=None):
     steps.append({"type": "wait", "name": "grip", "sec": g["close_delay"]})
     steps.append({"type": "move", "name": "lift", "points": _line(grasp, lift, step, speed / 2, min_t, 0.0, False, pitch_tol)})
 
-    # transit: go up/over in joint space (fast), ending exactly above the socket
+    # transit: if camera detects any obstacle peg in the 2D corridor, route via radial detour
     q_lift = steps[-1]["points"][-1][0]
     q_above = ik_best(above_sock, pitch_tol)
-    steps.append({"type": "move", "name": "transit", "points": [(q_above, _joint_time(q_lift, q_above))]})
+
+    safe_radius = cfg.get("motion", {}).get("obstacle_safe_radius", 0.050)
+    has_obstacle = False
+    if obstacles:
+        for obs in obstacles:
+            if obs.get("color") == peg.get("color"):
+                continue
+            d = dist_to_segment((obs["x"], obs["y"]), (peg["x"], peg["y"]), (sock["x"], sock["y"]))
+            if d < safe_radius:
+                has_obstacle = True
+                break
+
+    if has_obstacle:
+        # Radial Retraction Via-Point: retract towards inner base (r ~ 0.125m) to clear outer obstacles
+        th_peg = math.atan2(peg["y"], peg["x"] - 0.012)
+        th_sock = math.atan2(sock["y"], sock["x"] - 0.012)
+        th_mid = (th_peg + th_sock) / 2.0
+        r_via = 0.125
+        x_via = 0.012 + r_via * math.cos(th_mid)
+        y_via = r_via * math.sin(th_mid)
+        z_via = max(lift.z, hover.z)
+        p_via = Pose(x_via, y_via, z_via, DOWN)
+        try:
+            q_via = ik_best(p_via, pitch_tol)
+            steps.append({"type": "move", "name": "avoid_obstacle_via",
+                          "points": [(q_via, _joint_time(q_lift, q_via))]})
+            steps.append({"type": "move", "name": "transit",
+                          "points": [(q_above, _joint_time(q_via, q_above))]})
+        except IKError:
+            steps.append({"type": "move", "name": "transit", "points": [(q_above, _joint_time(q_lift, q_above))]})
+    else:
+        steps.append({"type": "move", "name": "transit", "points": [(q_above, _joint_time(q_lift, q_above))]})
     a = Pose(*fk(q_above))
     steps.append({"type": "move", "name": "to_hover", "points": _line(a, hover, step, speed / 2, min_t, 0.0, False, pitch_tol)})
 
