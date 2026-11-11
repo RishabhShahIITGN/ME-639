@@ -25,4 +25,4 @@ pegs:
 
 # Colour of the socket board (cardboard / MDF board)
 board:
-  hsv: [[[10, 20, 70], [35, 170, 195]]]
+  hsv: [[[10, 20, 50], [30, 180, 240]]]

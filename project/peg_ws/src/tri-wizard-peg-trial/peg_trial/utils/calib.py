@@ -22,11 +22,33 @@ def _dictionary(name="DICT_4X4_50"):
 
 def detect_markers(gray, dict_name="DICT_4X4_50"):
     d = _dictionary(dict_name)
-    if hasattr(cv2.aruco, "ArucoDetector"):                       # OpenCV >= 4.7
-        corners, ids, _ = cv2.aruco.ArucoDetector(d, cv2.aruco.DetectorParameters()).detectMarkers(gray)
-    else:                                                          # OpenCV 4.5 (Ubuntu 22.04 apt)
-        corners, ids, _ = cv2.aruco.detectMarkers(gray, d, parameters=cv2.aruco.DetectorParameters_create())
-    return corners, ids
+
+    def _run(img, subpix=False, win_max=23):
+        if hasattr(cv2.aruco, "ArucoDetector"):                       # OpenCV >= 4.7
+            p = cv2.aruco.DetectorParameters()
+            if subpix:
+                p.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            p.adaptiveThreshWinSizeMax = win_max
+            return cv2.aruco.ArucoDetector(d, p).detectMarkers(img)[:2]
+        else:                                                          # OpenCV 4.5 (Ubuntu 22.04 apt)
+            p = cv2.aruco.DetectorParameters_create()
+            if subpix:
+                p.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            p.adaptiveThreshWinSizeMax = win_max
+            return cv2.aruco.detectMarkers(img, d, parameters=p)[:2]
+
+    corners, ids = _run(gray, subpix=True)
+    if ids is not None:
+        return corners, ids
+
+    # Fallback with CLAHE for uneven lab lighting / shadows
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    g_clahe = clahe.apply(gray)
+    corners, ids = _run(g_clahe, subpix=True, win_max=45)
+    if ids is not None:
+        return corners, ids
+
+    return _run(gray, subpix=False)
 
 
 def marker_image(marker_id=0, px=400, dict_name="DICT_4X4_50"):
@@ -47,6 +69,13 @@ def T_base_marker(mx, my, mz):
 def solve_T_base_cam(bgr, K, marker_len, mx, my, mz, marker_id=0, dist=None, dict_name="DICT_4X4_50"):
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) if bgr.ndim == 3 else bgr
     corners, ids = detect_markers(gray, dict_name)
+    if ids is None or marker_id not in ids.flatten():
+        for fallback_dict in ["DICT_4X4_100", "DICT_4X4_250", "DICT_5X5_50"]:
+            if fallback_dict != dict_name:
+                c_try, id_try = detect_markers(gray, fallback_dict)
+                if id_try is not None and marker_id in id_try.flatten():
+                    corners, ids = c_try, id_try
+                    break
     if ids is None or marker_id not in ids.flatten():
         raise RuntimeError(f"marker id {marker_id} not found (found: {None if ids is None else ids.flatten().tolist()})")
     c = corners[list(ids.flatten()).index(marker_id)].reshape(4, 2).astype(np.float64)

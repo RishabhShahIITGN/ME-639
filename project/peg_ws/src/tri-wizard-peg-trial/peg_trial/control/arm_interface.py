@@ -116,21 +116,29 @@ class ArmInterface:
             p0.time_from_start = Duration(sec=0, nanosec=0)
             msg.points.append(p0)
 
-        for q, t in points:
+        # velocities: 0 at the start/end, central differences in between -> smooth, no stop-start
+        allp = ([(q_curr, 0.0)] if q_curr is not None else []) + list(points)
+        k0 = len(allp) - len(points)
+        for i in range(k0, len(allp)):
+            q, t = allp[i]
             pt = JointTrajectoryPoint()
             pt.positions = [float(a) for a in q]
-            pt.velocities = [0.0] * len(self.names)
+            if 0 < i < len(allp) - 1:
+                (qa, ta), (qb, tb) = allp[i - 1], allp[i + 1]
+                pt.velocities = [float((b - a) / max(tb - ta, 1e-3)) for a, b in zip(qa, qb)]
+            else:
+                pt.velocities = [0.0] * len(self.names)
             pt.time_from_start = _dur(t)
             msg.points.append(pt)
 
-        # 1. Publish to trajectory topic
-        self.traj_pub.publish(msg)
-
-        # 2. Also send as Action Goal to ensure execution
+        # send ONCE: action if available (gives a result), otherwise the topic.
+        # Sending both makes the controller receive two goals and replace the first mid-motion.
         if hasattr(self, "arm_client") and self.arm_client.server_is_ready():
             goal = self._FollowJointTrajectory.Goal()
             goal.trajectory = msg
             self.arm_client.send_goal_async(goal)
+        else:
+            self.traj_pub.publish(msg)
 
     def _send_joint(self, q, t):
         req = self._SetJointPosition.Request()
@@ -173,11 +181,27 @@ class ArmInterface:
         return self._sleep(total + settle)
 
     # ---------------- gripper ----------------
-    def gripper(self, cmd: str, wait=0.8) -> bool:
+    def gap_to_position(self, gap):
+        """Finger gap (m) -> gripper command, by straight-line interpolation between the two
+        measured points (gripper_open <-> gripper_gap_open, gripper_close <-> gripper_gap_closed)."""
+        g_o, g_c = self.cfg.get("gripper_gap_open"), self.cfg.get("gripper_gap_closed")
+        if g_o is None or g_c is None or abs(g_o - g_c) < 1e-6:
+            return None
+        f = min(1.0, max(0.0, (gap - g_c) / (g_o - g_c)))
+        return self.cfg["gripper_close"] + f * (self.cfg["gripper_open"] - self.cfg["gripper_close"])
+
+    def gripper(self, cmd: str, wait=0.8, gap=None) -> bool:
         if self.estopped:
             return False
-        pos = self.cfg["gripper_open"] if cmd == "open" else self.cfg["gripper_close"]
+        # "open", "pregrasp", "release" open wide to gripper_open so peg is freely released
+        use_adaptive = self.cfg.get("use_adaptive_gap", False)
+        pos = {"open": self.cfg["gripper_open"], "close": self.cfg["gripper_close"],
+               "pregrasp": self.cfg["gripper_open"],
+               "release": self.cfg["gripper_open"]}.get(cmd, self.cfg["gripper_open"])
+        if use_adaptive and gap is not None and cmd != "close" and self.gap_to_position(gap) is not None:
+            pos = self.gap_to_position(gap)
         if self.backend == "ros2_control":
+            self.node.get_logger().info(f"gripper {cmd}: position={pos:.4f}")
             goal = self._GripperCommand.Goal()
             goal.command.position = float(pos)
             goal.command.max_effort = float(self.cfg.get("gripper_max_effort", 5.0))

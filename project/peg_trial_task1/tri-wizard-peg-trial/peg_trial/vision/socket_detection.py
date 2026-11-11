@@ -19,10 +19,18 @@ from .shape_detection import classify_shape
 def find_holes(bgr: np.ndarray, board_hsv_ranges, min_area: float = 200.0, max_area_frac: float = 0.3):
     """Return (board_mask, [hole_contour, ...])."""
     board = hsv_mask(bgr, board_hsv_ranges, open_k=3, close_k=3)
-    outer, _ = cv2.findContours(board, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Bridge vertical cuts/glares across the long cardboard strip
+    k_bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 25))
+    closed = cv2.morphologyEx(board, cv2.MORPH_CLOSE, k_bridge)
+
+    outer, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not outer:
         return board, []
-    outline = max(outer, key=cv2.contourArea)
+
+    # Prefer the tall vertical strip (board)
+    candidates = [c for c in outer if cv2.boundingRect(c)[3] > 160]
+    outline = max(candidates if candidates else outer, key=cv2.contourArea)
     board_area = cv2.contourArea(outline)
 
     filled = np.zeros_like(board)

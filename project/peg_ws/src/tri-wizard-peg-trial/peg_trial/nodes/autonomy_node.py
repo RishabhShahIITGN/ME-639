@@ -25,7 +25,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from peg_trial.control.arm_interface import ArmInterface
-from peg_trial.planning.pick_place_planner import PlanError, match_pegs_to_sockets, plan_pick_place
+from peg_trial.planning.pick_place_planner import PlanError, match_pegs_to_sockets, plan_order, plan_pick_place
 from peg_trial.utils.config import load
 from peg_trial.utils.scene_buffer import SceneBuffer
 
@@ -57,7 +57,7 @@ class AutonomyNode(Node):
             if s["type"] == "move":
                 ok = self.arm.move(s["points"])
             elif s["type"] == "gripper":
-                ok = self.arm.gripper(s["cmd"], wait=0.3)
+                ok = self.arm.gripper(s["cmd"], wait=0.3, gap=s.get("gap"))
             else:
                 ok = self.arm._sleep(s["sec"])
             if not ok:
@@ -103,12 +103,45 @@ class AutonomyNode(Node):
         self.arm.gripper("open")
         self.arm.move([(self.cfg["motion"]["home_joints"], 3.0)])
 
-        snap = self.fresh_snapshot(expected_sockets=4)
+        snap = self.fresh_snapshot(expected_sockets=1)
         if snap is None or not snap["sockets"]:
             self.get_logger().error("no sockets detected — check board HSV / camera calibration")
             return
         sockets = snap["sockets"]
-        self.say(f"sockets: {[s['shape'] for s in sockets]}  pegs: {[(p['color'], p['shape']) for p in snap['pegs']]}")
+        # Filter out sockets beyond physical reach (>24.5cm)
+        max_sock_r = self.cfg.get("vision", {}).get("max_socket_radius_m", 0.205)
+        before_r = len(sockets)
+        sockets = [s for s in sockets if math.hypot(s["x"] - 0.012, s["y"]) <= max_sock_r]
+        if len(sockets) < before_r:
+            self.get_logger().warn(
+                f"Filtered {before_r - len(sockets)} socket(s) beyond r={max_sock_r*100:.1f}cm — "
+                f"board is placed too far from robot! Please move board closer (ideal: 17 to 19 cm from robot base)")
+
+        # De-duplicate: keep at most one socket per shape.
+        # If the vision returns two "square" sockets (real + aluminum rail), keep only the
+        # one seen in the most frames (highest 'n'); ties broken by proximity to board centre.
+        seen_shapes: dict = {}
+        for s in sorted(sockets, key=lambda s: -s.get("n", 1)):
+            sh = s["shape"]
+            if sh not in seen_shapes:
+                seen_shapes[sh] = s
+        sockets = list(seen_shapes.values())
+        if len(sockets) < before_r and len(sockets) < len(snap["sockets"]):
+            dropped = len(snap["sockets"]) - len(sockets)
+            self.get_logger().warn(
+                f"Dropped {dropped} duplicate/distant socket(s)")
+        detected_shapes = [s["shape"] for s in sockets]
+        all_shapes = ["square", "hexagon", "circle", "triangle"]
+        missing_shapes = [sh for sh in all_shapes if sh not in detected_shapes]
+        if missing_shapes:
+            self.say(f"WARNING: {len(missing_shapes)} socket(s) not detected: {missing_shapes}. "
+                     f"Will execute pick-and-place for {len(sockets)} detected socket(s): {detected_shapes}")
+        else:
+            self.say(f"All 4 sockets detected: {detected_shapes}")
+        self.say(f"pegs in view: {[(p['color'], p['shape']) for p in snap['pegs']]}")
+
+        if ex.get("mode", "one_by_one") == "one_by_one":
+            return self.run_one_by_one(run_id, sockets)
 
         t_run = time.time()
         done = 0
@@ -116,34 +149,81 @@ class AutonomyNode(Node):
         pairs = match_pegs_to_sockets(snap["pegs"], sockets)
         pairs.sort(key=lambda ps: order.index(ps[0]["shape"]) if ps[0]["shape"] in order else 99)
         if len(pairs) < len(snap["pegs"]):
-            self.get_logger().warn("some pegs have no matching socket shape!")
+            unmatched = [p for p in snap["pegs"] if not any(p is ps[0] for ps in pairs)]
+            self.get_logger().warn(
+                f"Some pegs have no matching detected socket: {[(p['color'], p['shape']) for p in unmatched]}. "
+                f"Proceeding with {len(pairs)} matched peg(s): {[(p['color'], p['shape']) for p, _ in pairs]}."
+            )
+        if not pairs:
+            self.get_logger().error("No pegs match any of the detected sockets.")
+            return
 
-        for idx, (peg, sock) in enumerate(pairs):
+        # find an order in which every peg can be placed without collisions (look-ahead search)
+        best, errs = plan_order(pairs, self.cfg, sockets, self.arm.joints(), preferred=order)
+        if len(best) < len(pairs):
+            self.get_logger().warn(f"only {len(best)}/{len(pairs)} pegs have a collision-free plan:")
+            for col, e in errs.items():
+                self.get_logger().warn(f"  {col}: {e}")
+        self.say(f"placement order: {[p['color'] for p, _ in best]}")
+        remaining = list(best) + [ps for ps in pairs if ps not in best]   # (peg, socket) still to do
+        placed = []                      # (peg, socket) already inserted -> obstacles for later pegs
+        latest = snap
+        idx = 0
+        while remaining and not self.arm.estopped:
+            idx += 1
+            # ---- pick the first peg (in preferred order) that has a COLLISION-FREE plan
+            chosen, plan_errors = None, []
+            for peg, sock in remaining:
+                cur = next((p for p in latest["pegs"] if p["color"] == peg["color"]), peg)
+                done_colors = {p["color"] for p, _ in placed}
+                others = [p for p in latest["pegs"] if p["color"] != cur["color"] and p["color"] not in done_colors]
+                try:
+                    steps, info = plan_pick_place(cur, sock, self.cfg, self.arm.joints(), obstacles=others,
+                                                  placed=placed, sockets=sockets)
+                    chosen = (peg, cur, sock, steps, info)
+                    break
+                except PlanError as e:
+                    plan_errors.append(f"{peg['color']}: {e}")
+            if chosen is None:
+                for e in plan_errors:
+                    self.get_logger().error(f"no safe plan — {e}")
+                for peg, _ in remaining:
+                    self.log_row("trials.csv", dict(run_id=run_id, index=idx, color=peg["color"], shape=peg["shape"],
+                                                    attempts=0, success=0, duration_s=0, yaw_error_deg=0,
+                                                    note="no collision-free plan"))
+                break
+            peg0, peg, sock, steps, info = chosen
+            remaining.remove((peg0, sock))
             color = peg["color"]
-            t0, attempts, ok, note, yaw_err = time.time(), 0, False, "", 0.0
+            t0, attempts, ok, note = time.time(), 0, False, ""
+            yaw_err = info["yaw_error_deg"]
             while attempts <= ex["max_retries"] and not ok and not self.arm.estopped:
                 attempts += 1
-                if attempts > 1:   # peg may have moved / fallen -> look again
+                if attempts > 1:   # peg may have moved / fallen -> look again and re-plan
                     s2 = self.fresh_snapshot()
                     peg = next((p for p in (s2 or {"pegs": []})["pegs"] if p["color"] == color), None)
                     if peg is None:
                         note = "peg lost"
                         break
-                self.say(f"[{idx + 1}/{len(pairs)}] {color} {peg['shape']} -> socket at "
-                         f"({sock['x']:.3f},{sock['y']:.3f})  attempt {attempts}")
-                try:
-                    other_pegs = [p for p in snap["pegs"] if p["color"] != color]
-                    steps, info = plan_pick_place(peg, sock, self.cfg, self.arm.joints(), obstacles=other_pegs)
-                except PlanError as e:
-                    note = str(e)
-                    self.get_logger().error(note)
-                    break
-                yaw_err = info["yaw_error_deg"]
-                if abs(yaw_err) > 8:
+                    done_colors = {p["color"] for p, _ in placed}
+                    others = [p for p in s2["pegs"] if p["color"] != color and p["color"] not in done_colors]
+                    try:
+                        steps, info = plan_pick_place(peg, sock, self.cfg, self.arm.joints(), obstacles=others,
+                                                      placed=placed, sockets=sockets)
+                    except PlanError as e:
+                        note = str(e)
+                        self.get_logger().error(note)
+                        break
+                self.say(f"[{idx}/{len(pairs)}] {color} {peg['shape']} -> socket ({sock['x']:.3f},{sock['y']:.3f}) "
+                         f"attempt {attempts} | grip {info['grasp_depth'] * 1000:.0f} mm below top, "
+                         f"carry z={info['carry_z']:.3f}, route={info['route']}")
+                for w in info.get("warnings", []):
+                    self.get_logger().warn(w)
+                if abs(yaw_err) > self.cfg["execution"].get("yaw_warn_deg", 8):
                     self.get_logger().warn(
-                        f"predicted yaw misalignment {yaw_err:.0f} deg (OMX has no wrist roll) — "
-                        f"rotate this peg by {-yaw_err:+.0f} deg (+ = counter-clockwise seen from above) "
-                        f"during setup, or use a chamfered socket")
+                        f"predicted socket misalignment {yaw_err:+.0f} deg after the squeeze grasp "
+                        f"(OMX has no wrist roll, so this cannot be corrected by the arm; it depends only on "
+                        f"how the socket is turned relative to the robot) — relying on socket clearance")
                 if not self.run_steps(steps):
                     note = "aborted (e-stop)"
                     break
@@ -153,16 +233,132 @@ class AutonomyNode(Node):
                 else:
                     ok = True
             done += ok
+            if ok:
+                placed.append((peg, sock))
             self.log_row("trials.csv", dict(
-                run_id=run_id, index=idx + 1, color=color, shape=peg["shape"] if peg else "", attempts=attempts,
+                run_id=run_id, index=idx, color=color, shape=peg["shape"] if peg else "", attempts=attempts,
                 success=int(ok), duration_s=round(time.time() - t0, 2), yaw_error_deg=round(yaw_err, 1), note=note))
-            if self.arm.estopped:
-                break
+            if remaining and self.cfg["robot"]["backend"] != "dry_run":
+                latest = self.fresh_snapshot() or latest      # pegs may have been nudged: refresh positions
 
         total = time.time() - t_run
         self.log_row("runs.csv", dict(run_id=run_id, backend=self.cfg["robot"]["backend"], pegs=len(pairs),
                                       success=done, total_time_s=round(total, 2), estop=int(self.arm.estopped)))
         self.say(f"RUN {run_id} finished: {done}/{len(pairs)} pegs in {total:.1f}s")
+
+    # ------------------------------------------------------------------ one peg at a time
+    def wait_for_new_peg(self, placed_colors, sockets, bad_spots=(), timeout=600.0):
+        """Wait (arm at home) until ONE new peg stands still in the workspace.
+
+        'New' = colour not placed yet and not sitting in a socket. 'Still' = the same
+        position (±5 mm) in two snapshots taken 1.5 s apart, so a hand putting the peg
+        down is never chased.
+        """
+        t0, last = time.time(), None
+        while time.time() - t0 < timeout and not self.arm.estopped:
+            snap = self.fresh_snapshot()
+            cands = []
+            for p in (snap or {"pegs": []})["pegs"]:
+                in_socket = any(math.hypot(p["x"] - s["x"], p["y"] - s["y"]) < 0.025 for s in sockets)
+                tried = any(math.hypot(p["x"] - bx, p["y"] - by) < 0.01 for bx, by in bad_spots)
+                if p["color"] not in placed_colors and not in_socket and not tried:
+                    cands.append(p)
+            if cands:
+                # Prioritize candidates that have an available socket detected
+                avail_shapes = {s["shape"] for s in sockets}
+                matched = [p for p in cands if p["shape"] in avail_shapes]
+                p = matched[0] if matched else cands[0]
+
+                if last and last["color"] == p["color"] and math.hypot(p["x"] - last["x"], p["y"] - last["y"]) < 0.005:
+                    return p, snap
+                last = p
+            else:
+                last = None
+            time.sleep(1.5)
+        return None, None
+
+    def run_one_by_one(self, run_id, sockets):
+        """Task flow: a person puts ONE peg anywhere -> robot places it -> next peg ... until all sockets are full.
+        Pegs already in their sockets stay there and are obstacles for every later move."""
+        ex = self.cfg["execution"]
+        placed = []                         # (peg, socket) already inserted
+        t_run = time.time()
+        n_total = len(sockets)
+        bad_spots = []                      # positions where a peg could not be done safely
+        while len(placed) < n_total and not self.arm.estopped:
+            avail_shapes = [s["shape"] for s in sockets if id(s) not in {id(s_p) for _, s_p in placed}]
+            self.say(f"[{len(placed)}/{n_total} placed] waiting for next peg (active sockets: {avail_shapes})...")
+            peg, snap = self.wait_for_new_peg({p["color"] for p, _ in placed}, sockets, bad_spots)
+            if peg is None:
+                self.get_logger().error("no new peg appeared — stopping")
+                break
+            used = {id(s) for _, s in placed}
+            sock = next((s for s in sockets if s["shape"] == peg["shape"] and id(s) not in used), None)
+            if sock is None:
+                # Check if the missing socket appeared dynamically in the latest snapshot
+                if snap and "sockets" in snap:
+                    for s_new in snap["sockets"]:
+                        if s_new["shape"] == peg["shape"] and not any(s_old["shape"] == s_new["shape"] for s_old in sockets):
+                            self.say(f"Socket for {peg['shape']} detected dynamically! Adding to active sockets.")
+                            sockets.append(s_new)
+                            n_total = len(sockets)
+                            sock = s_new
+                            break
+                if sock is None:
+                    avail = [s["shape"] for s in sockets if id(s) not in used]
+                    self.get_logger().warn(
+                        f"Skipping {peg['color']} {peg['shape']}: no detected socket for this shape! "
+                        f"Detected sockets available: {avail}. Please remove or replace this peg."
+                    )
+                    bad_spots.append((peg["x"], peg["y"]))
+                    time.sleep(2.0)
+                    continue
+            t0, attempts, ok, note, yaw_err = time.time(), 0, False, "", 0.0
+            while attempts <= ex["max_retries"] and not ok and not self.arm.estopped:
+                attempts += 1
+                if attempts > 1:
+                    s2 = self.fresh_snapshot()
+                    peg = next((p for p in (s2 or {"pegs": []})["pegs"] if p["color"] == peg["color"]), None)
+                    if peg is None:
+                        note = "peg lost"
+                        break
+                try:
+                    # obstacles = only the pegs already in sockets (plus board/table); the new peg is the target
+                    steps, info = plan_pick_place(peg, sock, self.cfg, self.arm.joints(), obstacles=[],
+                                                  placed=placed, sockets=sockets)
+                except PlanError as e:
+                    note = str(e)
+                    self.get_logger().error(f"{peg['color']}: no safe plan — {e}  (put the peg somewhere else)")
+                    break
+                yaw_err = info["yaw_error_deg"]
+                self.say(f"{peg['color']} {peg['shape']} at ({peg['x']:.3f},{peg['y']:.3f}) -> socket "
+                         f"({sock['x']:.3f},{sock['y']:.3f}) | grip {info['grasp_depth'] * 1000:.0f} mm below top, "
+                         f"route={info['route']}, predicted yaw error {yaw_err:+.0f} deg")
+                for w in info.get("warnings", []):
+                    self.get_logger().warn(w)
+                if not self.run_steps(steps):
+                    note = "aborted (e-stop)"
+                    break
+                if ex.get("verify", True) and self.cfg["robot"]["backend"] != "dry_run":
+                    ok, note = self.verify(peg["color"], sock, info["peg_height"])
+                    self.say(f"verify {peg['color']}: {'OK' if ok else 'FAIL'} {note}")
+                else:
+                    ok = True
+            if ok:
+                placed.append((peg, sock))
+            self.log_row("trials.csv", dict(
+                run_id=run_id, index=len(placed) + (0 if ok else 1), color=peg["color"] if peg else "",
+                shape=peg["shape"] if peg else "", attempts=attempts, success=int(ok),
+                duration_s=round(time.time() - t0, 2), yaw_error_deg=round(yaw_err, 1), note=note))
+            if self.arm.estopped:
+                break
+            if not ok and peg is not None:
+                bad_spots.append((peg["x"], peg["y"]))      # wait until the person moves it
+        total = time.time() - t_run
+        self.log_row("runs.csv", dict(run_id=run_id, backend=self.cfg["robot"]["backend"], pegs=n_total,
+                                      success=len(placed), total_time_s=round(total, 2),
+                                      estop=int(self.arm.estopped)))
+        self.say(f"RUN {run_id} finished: {len(placed)}/{n_total} pegs placed in {total:.1f}s")
 
 
 def main():

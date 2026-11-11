@@ -48,12 +48,15 @@ def rays_to_plane(uv, z_plane, K, T):
     return (o[:, None] + d * t).T                                     # (N,3)
 
 
-def metric_shape(contour_px, z_plane, K, T, eps):
+def metric_shape(contour_px, z_plane, K, T, eps, min_area_mm=750.0):
     """Classify a pixel outline AFTER projecting it onto the horizontal plane z_plane."""
     pts = rays_to_plane(contour_px.reshape(-1, 2).astype(float), z_plane, K, T)[:, :2]
     if len(pts) < 3:
         return None
-    return _classify_mm(np.round(pts * MM).astype(np.int32).reshape(-1, 1, 2), eps)
+    c_mm = np.round(pts * MM).astype(np.int32).reshape(-1, 1, 2)
+    if cv2.contourArea(c_mm) < min_area_mm:
+        return None
+    return _classify_mm(c_mm, eps)
 
 
 def top_face(mask, depth_m, K, T, band=0.008):
@@ -239,7 +242,7 @@ def draw(bgr, result, K, T_base_cam):
     # 2. Draw Sockets with magenta/cyan outlines and reachability warnings
     for s in result.get("sockets", []):
         r_dist = math.hypot(s["x"] - 0.012, s["y"])
-        is_reachable = (r_dist <= 0.245)
+        is_reachable = (r_dist <= 0.205)
         # Cyan if reachable, bright red if too far
         colr = (255, 255, 0) if is_reachable else (0, 0, 255)
         
@@ -250,7 +253,7 @@ def draw(bgr, result, K, T_base_cam):
         if pt[2] > 0:
             u, v = int(fx * pt[0] / pt[2] + cx), int(fy * pt[1] / pt[2] + cy)
             cv2.circle(img, (u, v), 5, colr, -1)
-            status = "OK" if is_reachable else "TOO FAR!"
+            status = "OK" if is_reachable else "TOO FAR (move closer)"
             tag = f"SOCKET: {s['shape']} ({r_dist*100:.1f}cm - {status})"
             cv2.putText(img, tag, (u - 50, v + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
             cv2.putText(img, tag, (u - 50, v + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, colr, 1, cv2.LINE_AA)

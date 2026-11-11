@@ -5,9 +5,9 @@ cameras:
     depth_topic: /cam1/camera/aligned_depth_to_color/image_raw
     info_topic: /cam1/camera/color/camera_info
     T_base_cam:
-    - [-0.96335, 0.17631, -0.20218, 0.27724]
-    - [0.23624, 0.91466, -0.32799, 0.14377]
-    - [0.1271, -0.36373, -0.92279, 0.50357]
+    - [-0.95236, 0.12192, -0.27955, 0.23805]
+    - [0.21832, 0.91257, -0.34575, 0.18957]
+    - [0.21296, -0.39031, -0.89572, 0.47037]
     - [0.0, 0.0, 0.0, 1.0]
   cam2:
     color_topic: /cam2/camera/color/image_raw

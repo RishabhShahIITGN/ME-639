@@ -95,7 +95,6 @@ def classify_shape(contour, eps_frac: float = 0.03):
     d = {s: math.sqrt(sum(w * (f - i) ** 2 for w, f, i in zip(WEIGHTS, feats, IDEAL[s]))) for s in IDEAL}
     ranked = sorted(d, key=d.get)
     shape = ranked[0]
-    # confidence: how much closer the winner is than the runner-up
     conf = max(0.0, min(1.0, (d[ranked[1]] - d[shape]) / (d[ranked[1]] + 1e-9) * 1.5))
     return shape, np.asarray(corner_points(shape, hull, eps_frac), float), conf
 

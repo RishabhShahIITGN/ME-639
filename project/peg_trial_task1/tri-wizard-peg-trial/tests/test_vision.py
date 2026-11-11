@@ -10,7 +10,10 @@ from peg_trial.vision.scene import fuse, process_frame
 from peg_trial.vision.shape_detection import classify_shape
 from peg_trial.utils.synthetic import polygon
 
-COLORS, CALIB, TASK = load("colors.yaml"), load("camera_calib.yaml"), load("task.yaml")
+from synthetic_cfg import CAMERAS, COLORS, task
+
+CALIB = {"cameras": {k: {"T_base_cam": v} for k, v in CAMERAS.items()}}
+TASK = task()
 
 
 @pytest.mark.parametrize("shape", ["triangle", "square", "hexagon", "circle"])
