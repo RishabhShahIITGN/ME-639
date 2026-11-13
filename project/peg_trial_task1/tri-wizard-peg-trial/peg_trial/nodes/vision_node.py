@@ -77,7 +77,7 @@ class VisionNode(Node):
                 self.debug_pub[cam].publish(self.bridge.cv2_to_imgmsg(draw(bgr, r, self.K[cam], T), "bgr8"))
         if not results:
             return
-        scene = fuse(results, self.task["vision"].get("fuse_merge_dist", 0.03))
+        scene = fuse(results, self.task["vision"].get("fuse_merge_dist", 0.015))
         scene["stamp"] = self.get_clock().now().nanoseconds * 1e-9
 
         def _json_serialize(obj):

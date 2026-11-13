@@ -59,7 +59,7 @@ def metric_shape(contour_px, z_plane, K, T, eps, min_area_mm=750.0):
     return _classify_mm(c_mm, eps)
 
 
-def top_face(mask, depth_m, K, T, band=0.008):
+def top_face(mask, depth_m, K, T, band=0.008, min_z=None, max_z=None):
     """3-D points of the peg's TOP face (highest points in base frame) and its height."""
     vs, us = np.nonzero(mask)
     if us.size < 30:
@@ -67,6 +67,18 @@ def top_face(mask, depth_m, K, T, band=0.008):
     pts, us, vs = pixels_to_base(us, vs, depth_m, K, T)
     if len(pts) < 30:
         return None
+
+    # Filter out points that are physically impossible for a peg on the table
+    # (e.g. robot arm links/fingers above the peg, or reflections)
+    if min_z is not None:
+        valid = pts[:, 2] >= min_z
+        pts, us, vs = pts[valid], us[valid], vs[valid]
+    if max_z is not None:
+        valid = pts[:, 2] <= max_z
+        pts, us, vs = pts[valid], us[valid], vs[valid]
+    if len(pts) < 30:
+        return None
+
     # robust "highest surface": the highest 2 mm height-bin that holds enough
     # points (a few noisy "flying pixels" above the peg are ignored)
     z = pts[:, 2]
@@ -127,16 +139,38 @@ def process_frame(bgr, depth_m, K, T_base_cam, colors_cfg, task_cfg, cam_name="c
         return result
 
     # ---------- pegs ----------
-    for color, (contour, mask) in segment_pegs(bgr, colors_cfg, vis.get("min_peg_area_px", 300)).items():
-        top = top_face(mask, depth_m, K, T, vis.get("top_band_m", 0.02))
-        if top is None:
-            continue
-        top_pts, z_top = top
-        det = footprint_shape(top_pts[:, :2], eps)
+    expected_table_z = float(task_cfg.get("table_z", 0.0))
+    expected_peg_h = float(task_cfg.get("peg_height", 0.098))
+    expected_z_top = expected_table_z + expected_peg_h
+    min_z = expected_table_z + 0.01
+    max_z = expected_z_top + 0.035
+
+    peg_masks = segment_pegs(bgr, colors_cfg, vis.get("min_peg_area_px", 300))
+    for color, (contour, mask) in peg_masks.items():
+        top = top_face(mask, depth_m, K, T, vis.get("top_band_m", 0.02), min_z=min_z, max_z=max_z)
+        det = None
+        if top is not None:
+            top_pts, z_top = top
+            det = footprint_shape(top_pts[:, :2], eps)
+        
+        # Fallback if depth was missing (e.g. dark blue absorbing IR) or corrupted by arm occlusion:
+        # project the top portion of the color mask onto the known peg top height plane
+        if det is None:
+            vs, us = np.nonzero(mask)
+            if len(vs) >= 30:
+                v_min, v_max = vs.min(), vs.max()
+                h_top = max(25, int(0.50 * (v_max - v_min)))
+                sel = vs <= (v_min + h_top)
+                top_uv = np.c_[us[sel], vs[sel]].astype(float)
+                top_pts_base = rays_to_plane(top_uv, expected_z_top, K, T)
+                det = footprint_shape(top_pts_base[:, :2], eps)
+                z_top = expected_z_top
+
         if det is None:
             continue
+
         if not task_cfg.get("use_depth_height", True) or z_top < 0.04:
-            z_top = task_cfg["table_z"] + task_cfg.get("peg_height", 0.098)
+            z_top = expected_z_top
         fixed = colors_cfg["pegs"][color].get("shape")
         det.update(color=color, seen_shape=det["shape"], shape=fixed or det["shape"], z_top=z_top,
                    cam=cam_name, view=view, contour=contour)
@@ -145,18 +179,46 @@ def process_frame(bgr, depth_m, K, T_base_cam, colors_cfg, task_cfg, cam_name="c
     # ---------- sockets ----------
     board_ranges = colors_cfg.get("board", {}).get("hsv")
     if board_ranges:
-        board_mask, holes = find_holes(bgr, board_ranges, vis.get("min_socket_area_px", 200))
+        peg_cnts = [cnt for cnt, _ in peg_masks.values()]
+        board_mask, holes = find_holes(
+            bgr, board_ranges, vis.get("min_socket_area_px", 200), peg_contours=peg_cnts
+        )
         for h in holes:
             ring = cv2.bitwise_and(ring_mask(board_mask.shape, h), board_mask)
             vs, us = np.nonzero(ring)
             pts, _, _ = pixels_to_base(us, vs, depth_m, K, T)
+            expected_board_z = expected_table_z + float(task_cfg.get("place", {}).get("board_height", 0.008))
             if len(pts) >= 10:
                 z_board = float(np.median(pts[:, 2]))
             else:
-                z_board = float(task_cfg.get("table_z", 0.0))
+                z_board = expected_board_z
+            # The board is a flat cardboard strip on the table (< 15 mm thick).
+            # If ring touched an adjacent tall peg (e.g. z > 25 mm), clamp back to expected board height.
+            if z_board > (expected_table_z + 0.025) or z_board < (expected_table_z - 0.010):
+                z_board = expected_board_z
             det = metric_shape(h, z_board, K, T, eps)
             if det is None:
                 continue
+
+            # Ignore holes that are already occupied by a peg (e.g. after a peg is placed).
+            # A peg sitting in a hole distorts the contour and causes false shape classification.
+            # Center-to-center distance threshold is 20 mm (adjacent sockets are ~30 mm apart).
+            occupied = False
+            for p in result["pegs"]:
+                if math.hypot(det["x"] - p["x"], det["y"] - p["y"]) < 0.020:
+                    occupied = True
+                    break
+                pc = p.get("contour")
+                if pc is not None:
+                    pm = cv2.moments(pc)
+                    if pm["m00"] > 0:
+                        pu, pv = float(pm["m10"] / pm["m00"]), float(pm["m01"] / pm["m00"])
+                        if cv2.pointPolygonTest(h, (pu, pv), False) >= 0:
+                            occupied = True
+                            break
+            if occupied:
+                continue
+
             det.update(z_top=z_board, cam=cam_name, view=view, contour=h)
             result["sockets"].append(det)
     return result
@@ -186,7 +248,7 @@ def _merge(items):
     return out
 
 
-def fuse(results, merge_dist=0.03):
+def fuse(results, merge_dist=0.015):
     """Combine detections from both cameras.
 
     Pegs: same colour = same peg.  Sockets: closer than `merge_dist` m = same
@@ -207,7 +269,13 @@ def fuse(results, merge_dist=0.03):
                     break
             else:
                 groups.append([s])
-    return {"pegs": pegs, "sockets": [_merge(g) for g in groups]}
+    merged_sockets = [_merge(g) for g in groups]
+    # Filter out any socket candidate that coincides with a peg (occupied socket)
+    avail_sockets = [
+        s for s in merged_sockets
+        if not any(math.hypot(s["x"] - p["x"], s["y"] - p["y"]) < 0.020 for p in pegs)
+    ]
+    return {"pegs": pegs, "sockets": avail_sockets}
 
 
 def draw(bgr, result, K, T_base_cam):

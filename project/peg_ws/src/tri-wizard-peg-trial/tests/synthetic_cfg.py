@@ -25,4 +25,10 @@ def task(table_z=-0.05, peg_height=0.10):
     t["table_z"] = table_z
     t["peg_height"] = peg_height
     t["vision"]["min_socket_area_px"] = 500
+    t.get("place", {})["circle_y_offset"] = 0.0
+    t.get("place", {})["hexagon_y_offset"] = 0.0
+    t.get("place", {})["square_y_offset"] = 0.0
+    t.get("place", {})["square_x_offset"] = 0.0
+    t.get("grasp", {})["hexagon_grasp_backward_offset"] = 0.0
+    t.get("grasp", {})["square_grasp_backward_offset"] = 0.0
     return t

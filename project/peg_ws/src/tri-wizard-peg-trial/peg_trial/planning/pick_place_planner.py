@@ -92,6 +92,18 @@ def _reachable(x, y, z):
         return False
 
 
+def max_reachable_z(x, y, target_z=0.113, min_z=0.020, step=0.001):
+    """Find the highest reachable Z at (x, y) with top-down gripper (DOWN), up to target_z."""
+    if _reachable(x, y, target_z):
+        return target_z
+    z = target_z
+    while z >= min_z:
+        if _reachable(x, y, z):
+            return round(z, 4)
+        z -= step
+    return None
+
+
 def _checked_line(p0, p1, step, speed, min_t, gap, world, model, holding, ignore_board=False, what=""):
     """Straight Cartesian line, gripper pointing down; every IK point collision-checked."""
     poses = interpolate_line(p0, p1, step)
@@ -195,10 +207,42 @@ def choose_grasp(peg, sock, cfg, world, model, peg_h, gap_open=0.056, gap_hold=0
     def heights(d, over):
         below = peg_h - d                                         # TCP -> peg bottom
         z_grasp = peg["z_top"] - d
-        z_carry = (top_all if over else board_top) + clear + below
-        z_carry = max(z_carry, z_grasp + 0.01)
-        z_hover = sock["z_top"] + pl["hover_offset"] + below
-        z_final = sock["z_top"] - pl["insert_depth"] + below
+        if not over and "carry_z" in g:
+            cand_carry = cfg.get("table_z", 0.0) + g["carry_z"]
+            # If socket or peg is too far for hardcoded carry_z, cap to the maximum reachable height at that distance
+            z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_carry)
+            z_max_peg = max_reachable_z(peg["x"], peg["y"], cand_carry)
+            if z_max_sock is not None and z_max_peg is not None:
+                cand_carry = min(z_max_sock, z_max_peg)
+            min_carry = max(board_top + 0.002 + below, z_grasp + 0.01)
+            z_carry = max(cand_carry, min_carry)
+        else:
+            z_carry = (top_all if over else board_top) + clear + below
+            z_carry = max(z_carry, z_grasp + 0.01)
+        if "hover_z" in pl:
+            cand_hover = cfg.get("table_z", 0.0) + pl["hover_z"]
+            z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_hover)
+            min_hover = sock["z_top"] + pl["hover_offset"] + below
+            if z_max_sock is not None and z_max_sock >= min_hover:
+                z_hover = z_max_sock
+            elif z_max_sock is not None:
+                z_hover = z_max_sock
+            else:
+                z_hover = min_hover
+        else:
+            z_hover = sock["z_top"] + pl["hover_offset"] + below
+        if "release_z" in pl:
+            cand_final = cfg.get("table_z", 0.0) + pl["release_z"]
+            z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_final)
+            min_final = sock["z_top"] - pl["insert_depth"] + below
+            if z_max_sock is not None and z_max_sock >= min_final:
+                z_final = z_max_sock
+            elif z_max_sock is not None:
+                z_final = z_max_sock
+            else:
+                z_final = min_final
+        else:
+            z_final = sock["z_top"] - pl["insert_depth"] + below
         need = [(peg["x"], peg["y"], z_grasp), (peg["x"], peg["y"], z_carry),
                 (sock["x"], sock["y"], z_carry), (sock["x"], sock["y"], z_hover), (sock["x"], sock["y"], z_final)]
         if not all(_reachable(*n) for n in need):
@@ -234,10 +278,41 @@ def choose_grasp(peg, sock, cfg, world, model, peg_h, gap_open=0.056, gap_hold=0
         for over in (False, True):
             below = peg_h - d
             z_grasp = peg["z_top"] - d
-            z_carry = (top_all if over else board_top) + clear + below
-            z_carry = max(z_carry, z_grasp + 0.01)
-            z_hover = sock["z_top"] + pl["hover_offset"] + below
-            z_final = sock["z_top"] - pl["insert_depth"] + below
+            if not over and "carry_z" in g:
+                cand_carry = cfg.get("table_z", 0.0) + g["carry_z"]
+                z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_carry)
+                z_max_peg = max_reachable_z(peg["x"], peg["y"], cand_carry)
+                if z_max_sock is not None and z_max_peg is not None:
+                    cand_carry = min(z_max_sock, z_max_peg)
+                min_carry = max(board_top + 0.002 + below, z_grasp + 0.01)
+                z_carry = max(cand_carry, min_carry)
+            else:
+                z_carry = (top_all if over else board_top) + clear + below
+                z_carry = max(z_carry, z_grasp + 0.01)
+            if "hover_z" in pl:
+                cand_hover = cfg.get("table_z", 0.0) + pl["hover_z"]
+                z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_hover)
+                min_hover = sock["z_top"] + pl["hover_offset"] + below
+                if z_max_sock is not None and z_max_sock >= min_hover:
+                    z_hover = z_max_sock
+                elif z_max_sock is not None:
+                    z_hover = z_max_sock
+                else:
+                    z_hover = min_hover
+            else:
+                z_hover = sock["z_top"] + pl["hover_offset"] + below
+            if "release_z" in pl:
+                cand_final = cfg.get("table_z", 0.0) + pl["release_z"]
+                z_max_sock = max_reachable_z(sock["x"], sock["y"], cand_final)
+                min_final = sock["z_top"] - pl["insert_depth"] + below
+                if z_max_sock is not None and z_max_sock >= min_final:
+                    z_final = z_max_sock
+                elif z_max_sock is not None:
+                    z_final = z_max_sock
+                else:
+                    z_final = min_final
+            else:
+                z_final = sock["z_top"] - pl["insert_depth"] + below
             need = [(peg["x"], peg["y"], z_grasp), (peg["x"], peg["y"], z_carry),
                     (sock["x"], sock["y"], z_carry), (sock["x"], sock["y"], z_hover),
                     (sock["x"], sock["y"], z_final)]
@@ -361,6 +436,34 @@ def plan_pick_place(peg, sock, cfg, start_q=None, obstacles=None, placed=None, s
                            "down to pre-grasp")
 
     # ---- 2. approach, grasp, lift
+    # Shape-specific pregrasp backward adjustments towards origin:
+    sh_peg = (peg.get("shape", "")).lower().strip()
+    hex_backward = g.get("hexagon_grasp_backward_offset", 0.010)
+    sq_backward = g.get("square_grasp_backward_offset", 0.030)
+    tri_backward = g.get("triangle_grasp_backward_offset", 0.010)
+    backward_dist = 0.0
+    if sh_peg in ("hexagon", "hex"):
+        backward_dist = hex_backward
+    elif sh_peg in ("square", "sq"):
+        backward_dist = sq_backward
+    elif sh_peg in ("triangle", "tri"):
+        backward_dist = tri_backward
+
+    if backward_dist > 0:
+        r_orig = math.hypot(pre.x, pre.y)
+        if r_orig > 1e-4:
+            dx_back = -backward_dist * (pre.x / r_orig)
+            dy_back = -backward_dist * (pre.y / r_orig)
+            pre_shifted = Pose(pre.x + dx_back, pre.y + dy_back, pre.z)
+            grasp_shifted = Pose(grasp.x + dx_back, grasp.y + dy_back, grasp.z)
+            carry_peg_shifted = Pose(carry_peg.x + dx_back, carry_peg.y + dy_back, carry_peg.z)
+            steps.append({"type": "move", "name": f"{sh_peg}_pregrasp_adjust",
+                          "points": _checked_line(pre, pre_shifted, step, speed / 2, min_t, gap_open, world, model,
+                                                  None, ignore_board=True, what=f"{sh_peg} pregrasp adjust")})
+            pre = pre_shifted
+            grasp = grasp_shifted
+            carry_peg = carry_peg_shifted
+
     steps.append({"type": "move", "name": "approach",
                   "points": _checked_line(pre, grasp, step, speed / 2, min_t, gap_open, world, model, None,
                                           what="approach")})
@@ -378,41 +481,78 @@ def plan_pick_place(peg, sock, cfg, start_q=None, obstacles=None, placed=None, s
         steps.append({"type": "move", "name": "to_hover",
                       "points": _checked_line(carry_sock, hover, step, speed / 2, min_t, gap_hold, world, model,
                                               holding, ignore_board=True, what="to hover")})
+
+    # Shape-specific X and Y offsets: after hovering and before placing, move end effector in XY
+    circle_y_off = pl.get("circle_y_offset", 0.0)
+    hexagon_y_off = pl.get("hexagon_y_offset", 0.008)
+    square_y_off = pl.get("square_y_offset", 0.035)
+    square_x_off = pl.get("square_x_offset", 0.0)
+    tri_place_back = pl.get("triangle_place_backward_offset", 0.010)
+    tri_x_off = pl.get("triangle_x_offset", 0.025)
+    tri_y_off = pl.get("triangle_y_offset", 0.025)
+    sh_check = (sock.get("shape", "") or peg.get("shape", "")).lower().strip()
+
+    x_shift, y_shift = 0.0, 0.0
+    if sh_check == "circle":
+        y_shift = circle_y_off
+    elif sh_check in ("hexagon", "hex"):
+        y_shift = hexagon_y_off
+    elif sh_check in ("square", "sq"):
+        x_shift = square_x_off
+        y_shift = square_y_off
+    elif sh_check in ("triangle", "tri"):
+        r_sock = math.hypot(hover.x, hover.y)
+        if r_sock > 1e-4 and tri_place_back > 0:
+            x_shift = -tri_place_back * (hover.x / r_sock)
+            y_shift = -tri_place_back * (hover.y / r_sock)
+        x_shift += tri_x_off
+        y_shift += tri_y_off
+
+    if abs(x_shift) > 1e-6 or abs(y_shift) > 1e-6:
+        hover_shifted = Pose(hover.x + x_shift, hover.y + y_shift, hover.z)
+        final = Pose(final.x + x_shift, final.y + y_shift, final.z)
+        steps.append({"type": "move", "name": f"{sh_check}_adjust",
+                      "points": _checked_line(hover, hover_shifted, step, speed / 2, min_t, gap_hold, world, model,
+                                              holding, ignore_board=True, what=f"{sh_check} xy-adjust")})
+        hover = hover_shifted
+
     ins, t = [], 0.0
-    for p in interpolate_line(hover, final, pl["descend_step"]):
-        hit = check_state(p.x, p.y, p.z, gap_hold, world, model, holding, ignore_board=True)
-        if hit:
-            raise PlanError(f"insert: {hit}")
-        t += pl["descend_time_per_step"]
-        ins.append((ik(p), t))
+    if hover.z > final.z + 1e-4:
+        for p in interpolate_line(hover, final, pl["descend_step"]):
+            hit = check_state(p.x, p.y, p.z, gap_hold, world, model, holding, ignore_board=True)
+            if hit:
+                raise PlanError(f"insert: {hit}")
+            t += pl["descend_time_per_step"]
+            ins.append((ik(p), t))
+    else:
+        ins.append((ik(final), pl.get("descend_time_per_step", 0.15)))
     steps.append({"type": "move", "name": "insert", "points": ins})
 
     # ---- 4. release and leave the placed peg
     steps.append({"type": "gripper", "name": "release", "cmd": "open", "gap": gap_release})
     steps.append({"type": "wait", "name": "release_wait", "sec": pl["release_delay"]})
-    clear_z = placed_top + model.tip_below + model.margin
-    if _reachable(sock["x"], sock["y"], clear_z):
+    clear_z = max(placed_top + model.tip_below + model.margin, final.z + 0.01)
+    if _reachable(final.x, final.y, clear_z):
         # straight up until the fingertips are above the placed peg
         steps.append({"type": "move", "name": "retreat",
-                      "points": _checked_line(final, Pose(sock["x"], sock["y"], clear_z), step, speed / 2, min_t,
+                      "points": _checked_line(final, Pose(final.x, final.y, clear_z), step, speed / 2, min_t,
                                               gap_release, world_wo_peg, model, None, ignore_board=True,
                                               what="retreat")})
-        cur = Pose(sock["x"], sock["y"], clear_z)
+        cur = Pose(final.x, final.y, clear_z)
     else:
         # too far out to lift that high: slide the open fingers back towards the robot along the peg
-        r = math.hypot(sock["x"] - 0.012, sock["y"])
-        ux, uy = (sock["x"] - 0.012) / r, sock["y"] / r
+        r = math.hypot(final.x - 0.012, final.y)
+        ux, uy = (final.x - 0.012) / r, final.y / r
         back = max(0.070, model.finger_hx + radius + model.margin + 0.035)
-        cur = Pose(sock["x"] - ux * back, sock["y"] - uy * back, final.z)
+        cur = Pose(final.x - ux * back, final.y - uy * back, final.z)
         steps.append({"type": "move", "name": "retreat_slide",
                       "points": _checked_line(final, cur, step, speed / 3, min_t, gap_release, world_wo_peg, model,
                                               None, ignore_board=True, what="retreat (slide back)")})
     if return_home:
         # If cur is low (e.g. from retreat_slide), first rise vertically clear of the board and peg
-        z_safe_rise = min(0.125, max(cur.z, placed_top + model.tip_below + model.margin))
-        while z_safe_rise > cur.z + 0.01 and not _reachable(cur.x, cur.y, z_safe_rise):
-            z_safe_rise -= 0.005
-        if z_safe_rise > cur.z + 0.005:
+        target_rise = min(0.125, max(cur.z, placed_top + model.tip_below + model.margin))
+        z_safe_rise = max_reachable_z(cur.x, cur.y, target_z=target_rise, min_z=cur.z + 0.005, step=0.002)
+        if z_safe_rise is not None and z_safe_rise > cur.z + 0.005:
             steps += _vertical(cur, z_safe_rise, step, speed, min_t, gap_release, world_after, model, None, "rise", ignore_board=True)
             cur = Pose(cur.x, cur.y, z_safe_rise)
         # Fold up to high elevation at the socket's azimuth, then rotate home in the air

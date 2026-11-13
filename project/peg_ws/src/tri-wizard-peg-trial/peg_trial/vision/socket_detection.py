@@ -16,7 +16,7 @@ from .color_segmentation import hsv_mask
 from .shape_detection import classify_shape
 
 
-def find_holes(bgr: np.ndarray, board_hsv_ranges, min_area: float = 200.0, max_area_frac: float = 0.3):
+def find_holes(bgr: np.ndarray, board_hsv_ranges, min_area: float = 200.0, max_area_frac: float = 0.3, peg_contours=None):
     """Return (board_mask, [hole_contour, ...])."""
     board = hsv_mask(bgr, board_hsv_ranges, open_k=3, close_k=3)
 
@@ -36,6 +36,24 @@ def find_holes(bgr: np.ndarray, board_hsv_ranges, min_area: float = 200.0, max_a
     filled = np.zeros_like(board)
     cv2.drawContours(filled, [outline], -1, 255, cv2.FILLED)
     holes_mask = cv2.subtract(filled, board)
+
+    # If pegs are on the board (e.g. already placed in sockets), mask them out
+    # so they don't merge with adjacent empty sockets or cause false socket detections.
+    if peg_contours:
+        peg_cutout = np.zeros_like(board)
+        for cnt in peg_contours:
+            if cnt is None or len(cnt) < 3:
+                continue
+            pm = cv2.moments(cnt)
+            if pm["m00"] > 0:
+                cx, cy = int(pm["m10"] / pm["m00"]), int(pm["m01"] / pm["m00"])
+                if cv2.pointPolygonTest(outline, (cx, cy), False) >= 0:
+                    bx, by, bw, bh = cv2.boundingRect(cnt)
+                    # Cover the placed peg region (expanded slightly in x and bottom, but not top
+                    # so we don't encroach into an adjacent socket above)
+                    cv2.rectangle(peg_cutout, (bx - 5, by - 2), (bx + bw + 5, by + bh + 5), 255, cv2.FILLED)
+        holes_mask = cv2.subtract(holes_mask, peg_cutout)
+
     holes_mask = cv2.morphologyEx(holes_mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
     holes, _ = cv2.findContours(holes_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

@@ -29,6 +29,39 @@ from peg_trial.planning.pick_place_planner import PlanError, match_pegs_to_socke
 from peg_trial.utils.config import load
 from peg_trial.utils.scene_buffer import SceneBuffer
 
+# ---------------------------------------------------------------------------
+# HARDCODED PRE-MEASURED TARGETS (from robot forward kinematics)
+# Set USE_HARDCODED_TARGETS = False to revert back to camera-detected targets.
+# ---------------------------------------------------------------------------
+USE_HARDCODED_TARGETS = False
+
+SHAPE_TARGETS = {
+    "circle": {
+        "point": "POINT_2",
+        "q": [0.5476, 0.3590, 0.0414, 1.1980],  # rad (joint1..joint4)
+        "x": 0.1641,                            # m (gripper Cartesian X in base frame)
+        "y": 0.0928,                            # m (gripper Cartesian Y in base frame)
+        "z": 0.0136,                            # m (gripper Cartesian Z in base frame)
+        "pitch_deg": 91.6,                       # deg (gripper pitch)
+    },
+    "hexagon": {
+        "point": "POINT_3",
+        "q": [0.1825, 0.0936, 0.3390, 1.1259],  # rad (joint1..joint4)
+        "x": 0.1595,                            # m (gripper Cartesian X in base frame)
+        "y": 0.0272,                            # m (gripper Cartesian Y in base frame)
+        "z": 0.0237,                            # m (gripper Cartesian Z in base frame)
+        "pitch_deg": 89.3,                       # deg (gripper pitch)
+    },
+    "square": {
+        "point": "POINT_4",
+        "q": [-0.2623, 0.1442, 0.3405, 1.0400], # rad (joint1..joint4)
+        "x": 0.1643,                            # m (gripper Cartesian X in base frame)
+        "y": -0.0409,                           # m (gripper Cartesian Y in base frame)
+        "z": 0.0161,                            # m (gripper Cartesian Z in base frame)
+        "pitch_deg": 87.4,                       # deg (gripper pitch)
+    },
+}
+
 
 class AutonomyNode(Node):
     def __init__(self):
@@ -46,6 +79,24 @@ class AutonomyNode(Node):
         self.scenes = SceneBuffer(20)
         self.create_subscription(String, "/peg_trial/scene", lambda m: self.scenes.add(json.loads(m.data)), 10)
         self.status_pub = self.create_publisher(String, "/peg_trial/status", 10)
+
+        if USE_HARDCODED_TARGETS:
+            from peg_trial.planning.kinematics import ik, Pose
+            for sh_name, tgt in SHAPE_TARGETS.items():
+                p = Pose(tgt["x"], tgt["y"], tgt["z"], math.radians(tgt["pitch_deg"]))
+                try:
+                    q_ik = ik(p)
+                    diff = max(abs(a - b) for a, b in zip(tgt["q"], q_ik))
+                    if diff > 0.02:
+                        self.get_logger().warn(
+                            f"Hardcoded target {tgt['point']} ({sh_name}): IK joint difference is {diff:.4f} rad (> 0.02 rad)"
+                        )
+                    else:
+                        self.get_logger().info(
+                            f"Verified hardcoded {tgt['point']} ({sh_name}): max IK joint diff = {diff:.4f} rad (<= 0.02 rad)"
+                        )
+                except Exception as e:
+                    self.get_logger().warn(f"Hardcoded target {tgt['point']} ({sh_name}) IK check error: {e}")
 
     # ---------- helpers ----------
     def say(self, text):
@@ -117,19 +168,55 @@ class AutonomyNode(Node):
                 f"Filtered {before_r - len(sockets)} socket(s) beyond r={max_sock_r*100:.1f}cm — "
                 f"board is placed too far from robot! Please move board closer (ideal: 17 to 19 cm from robot base)")
 
-        # De-duplicate: keep at most one socket per shape.
-        # If the vision returns two "square" sockets (real + aluminum rail), keep only the
-        # one seen in the most frames (highest 'n'); ties broken by proximity to board centre.
-        seen_shapes: dict = {}
+        # De-duplicate by spatial proximity: sockets within 18mm are duplicate detections of the same physical hole.
+        # Sockets separated by >= 18mm are distinct holes on the board!
+        spatial_sockets = []
         for s in sorted(sockets, key=lambda s: -s.get("n", 1)):
-            sh = s["shape"]
-            if sh not in seen_shapes:
-                seen_shapes[sh] = s
-        sockets = list(seen_shapes.values())
-        if len(sockets) < before_r and len(sockets) < len(snap["sockets"]):
-            dropped = len(snap["sockets"]) - len(sockets)
-            self.get_logger().warn(
-                f"Dropped {dropped} duplicate/distant socket(s)")
+            if not any(math.hypot(s["x"] - u["x"], s["y"] - u["y"]) < 0.018 for u in spatial_sockets):
+                spatial_sockets.append(s)
+        sockets = spatial_sockets
+        if len(sockets) < before_r:
+            dropped = before_r - len(sockets)
+            self.get_logger().info(f"Deduplicated {dropped} redundant socket cluster(s)")
+
+        # Disambiguate duplicate shape labels:
+        # If two distinct physical sockets share the same shape label (e.g. circle vs hexagon),
+        # assign the missing shape from ['circle', 'hexagon', 'square', 'triangle']
+        assigned_shapes = [s["shape"] for s in sockets]
+        missing_shapes = [sh for sh in ["circle", "hexagon", "square", "triangle"] if sh not in assigned_shapes]
+        if missing_shapes:
+            from collections import Counter
+            counts = Counter(s["shape"] for s in sockets)
+            for dupe_shape, cnt in counts.items():
+                if cnt > 1:
+                    dupes = [s for s in sockets if s["shape"] == dupe_shape]
+                    # Sort along distance from base
+                    dupes.sort(key=lambda s: math.hypot(s["x"], s["y"]))
+                    for d_sock in dupes[1:]:
+                        if missing_shapes:
+                            new_sh = missing_shapes.pop(0)
+                            self.get_logger().info(
+                                f"Disambiguated socket at ({d_sock['x']:.3f},{d_sock['y']:.3f}) from '{dupe_shape}' to missing shape '{new_sh}'"
+                            )
+                            d_sock["shape"] = new_sh
+
+        if USE_HARDCODED_TARGETS:
+            for sh_key, tgt in SHAPE_TARGETS.items():
+                existing = next((s for s in sockets if s["shape"].lower().strip() == sh_key), None)
+                if existing is not None:
+                    existing["x"] = tgt["x"]
+                    existing["y"] = tgt["y"]
+                    existing["z_top"] = tgt["z"]
+                else:
+                    sockets.append({
+                        "shape": sh_key,
+                        "x": tgt["x"],
+                        "y": tgt["y"],
+                        "z_top": tgt["z"],
+                        "size": 0.04,
+                        "conf": 1.0,
+                    })
+
         detected_shapes = [s["shape"] for s in sockets]
         all_shapes = ["square", "hexagon", "circle", "triangle"]
         missing_shapes = [sh for sh in all_shapes if sh not in detected_shapes]
@@ -175,6 +262,15 @@ class AutonomyNode(Node):
             chosen, plan_errors = None, []
             for peg, sock in remaining:
                 cur = next((p for p in latest["pegs"] if p["color"] == peg["color"]), peg)
+                sh_key = cur["shape"].lower().strip() if "shape" in cur else ""
+                if USE_HARDCODED_TARGETS and sh_key in SHAPE_TARGETS:
+                    tgt = SHAPE_TARGETS[sh_key]
+                    self.say(f"Shape={sh_key} -> using hardcoded {tgt['point']}")
+                    sock = dict(sock)
+                    sock["x"] = tgt["x"]
+                    sock["y"] = tgt["y"]
+                    sock["z_top"] = tgt["z"]
+                    sock["shape"] = sh_key
                 done_colors = {p["color"] for p, _ in placed}
                 others = [p for p in latest["pegs"] if p["color"] != cur["color"] and p["color"] not in done_colors]
                 try:
@@ -293,26 +389,55 @@ class AutonomyNode(Node):
                 self.get_logger().error("no new peg appeared — stopping")
                 break
             used = {id(s) for _, s in placed}
-            sock = next((s for s in sockets if s["shape"] == peg["shape"] and id(s) not in used), None)
-            if sock is None:
-                # Check if the missing socket appeared dynamically in the latest snapshot
-                if snap and "sockets" in snap:
-                    for s_new in snap["sockets"]:
-                        if s_new["shape"] == peg["shape"] and not any(s_old["shape"] == s_new["shape"] for s_old in sockets):
-                            self.say(f"Socket for {peg['shape']} detected dynamically! Adding to active sockets.")
-                            sockets.append(s_new)
-                            n_total = len(sockets)
-                            sock = s_new
-                            break
+            sh_key = peg["shape"].lower().strip() if "shape" in peg else ""
+            if USE_HARDCODED_TARGETS and sh_key in SHAPE_TARGETS:
+                tgt = SHAPE_TARGETS[sh_key]
+                self.say(f"Shape={sh_key} -> using hardcoded {tgt['point']}")
+                matched = next((s for s in sockets if s["shape"].lower().strip() == sh_key and id(s) not in used), None)
+                if matched is None:
+                    matched = next((s for s in sockets if s["shape"].lower().strip() == sh_key), None)
+                sock = dict(matched) if matched is not None else {"shape": sh_key, "size": 0.04}
+                sock["x"] = tgt["x"]
+                sock["y"] = tgt["y"]
+                sock["z_top"] = tgt["z"]
+                sock["shape"] = sh_key
+            else:
+                sock = next((s for s in sockets if s["shape"] == peg["shape"] and id(s) not in used), None)
                 if sock is None:
-                    avail = [s["shape"] for s in sockets if id(s) not in used]
-                    self.get_logger().warn(
-                        f"Skipping {peg['color']} {peg['shape']}: no detected socket for this shape! "
-                        f"Detected sockets available: {avail}. Please remove or replace this peg."
-                    )
-                    bad_spots.append((peg["x"], peg["y"]))
-                    time.sleep(2.0)
-                    continue
+                    # 1) Check if an existing unused socket is recognized as peg['shape'] in latest snap
+                    if snap and "sockets" in snap:
+                        for s_new in snap["sockets"]:
+                            for s_old in sockets:
+                                if id(s_old) not in used and math.hypot(s_new["x"] - s_old["x"], s_new["y"] - s_old["y"]) < 0.020:
+                                    if s_new["shape"] == peg["shape"]:
+                                        self.say(f"Socket at ({s_old['x']:.3f},{s_old['y']:.3f}) updated to {peg['shape']}!")
+                                        s_old["shape"] = peg["shape"]
+                                        sock = s_old
+                                        break
+                            if sock is not None:
+                                break
+                    # 2) Check if a brand new socket appeared dynamically in the latest snapshot
+                    if sock is None and snap and "sockets" in snap:
+                        for s_new in snap["sockets"]:
+                            # Skip candidate if it is near any already-placed peg
+                            if any(math.hypot(s_new["x"] - p_p["x"], s_new["y"] - p_p["y"]) < 0.020 for p_p, _ in placed):
+                                continue
+                            if any(math.hypot(s_new["x"] - s_old["x"], s_new["y"] - s_old["y"]) < 0.018 for s_old in sockets):
+                                continue
+                            if s_new["shape"] == peg["shape"]:
+                                self.say(f"Socket for {peg['shape']} detected dynamically! Adding to active sockets.")
+                                sockets.append(s_new)
+                                n_total = len(sockets)
+                                sock = s_new
+                                break
+                    if sock is None:
+                        avail = [s["shape"] for s in sockets if id(s) not in used]
+                        self.get_logger().warn(
+                            f"Skipping {peg['color']} {peg['shape']}: no detected socket for this shape! "
+                            f"Detected sockets available: {avail}. Please ensure socket is in camera view."
+                        )
+                        time.sleep(2.0)
+                        continue
             t0, attempts, ok, note, yaw_err = time.time(), 0, False, "", 0.0
             while attempts <= ex["max_retries"] and not ok and not self.arm.estopped:
                 attempts += 1

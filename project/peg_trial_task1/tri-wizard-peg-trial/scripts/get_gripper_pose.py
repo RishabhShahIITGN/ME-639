@@ -21,7 +21,22 @@ from peg_trial.planning.kinematics import fk  # noqa: E402
 def main():
     parser = argparse.ArgumentParser(description="Get gripper (x, y, z) in robot base frame")
     parser.add_argument("--deg", nargs=4, type=float, help="Joint 1-4 angles in degrees from Dynamixel Wizard")
+    parser.add_argument("--rad", nargs=4, type=float, help="Joint 1-4 angles in radians")
     args = parser.parse_args()
+
+    if args.rad:
+        q = list(args.rad)
+        x, y, z, pitch = fk(q)
+        print("\n--- FROM RADIANS ---")
+        print(f"Joint Angles (rad): [q1={q[0]:.4f}, q2={q[1]:.4f}, q3={q[2]:.4f}, q4={q[3]:.4f}]")
+        print(f"Gripper Center Position:")
+        print(f"  X = {x:.4f} m  ({x*100:.1f} cm)")
+        print(f"  Y = {y:.4f} m  ({y*100:.1f} cm)")
+        print(f"  Z = {z:.4f} m  ({z*100:.1f} cm)")
+        print(f"  Pitch = {math.degrees(pitch):.1f}° (90° = straight down)")
+        print("\nUse this for calibration:")
+        print(f"python3 scripts/calibrate_extrinsics.py --camera cam1 --size 0.037 --x {x:.3f} --y {y:.3f} --z {z:.3f}\n")
+        return
 
     if args.deg:
         # Dynamixel center is 180 degrees (0 rad)

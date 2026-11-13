@@ -14,7 +14,7 @@ pegs:
     hsv: [[[4, 150, 90], [16, 255, 255]]]
     shape: "hexagon"
   yellow:                      # physical bright yellow peg (triangle)
-    hsv: [[[18, 120, 70], [28, 255, 255]]]
+    hsv: [[[23, 175, 150], [32, 255, 255]]]
     shape: "triangle"
   green:                       # physical lime green cylinder (circle)
     hsv: [[[31, 100, 40], [85, 255, 255]]]

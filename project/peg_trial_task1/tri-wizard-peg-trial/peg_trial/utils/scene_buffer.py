@@ -39,7 +39,7 @@ def _stable(items, key_fn):
     return out
 
 
-def _socket_key(socks, dist=0.03):
+def _socket_key(socks, dist=0.015):
     """Greedy clustering: sockets within `dist` m of a cluster centre = same socket."""
     centres = []
     keys = {}

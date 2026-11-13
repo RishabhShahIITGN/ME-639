@@ -41,3 +41,40 @@ def test_two_camera_scene(seed):
         d = min(scene["sockets"], key=lambda s: math.hypot(s["x"] - t["x"], s["y"] - t["y"]))
         assert d["shape"] == t["shape"]
         assert math.hypot(d["x"] - t["x"], d["y"] - t["y"]) < 0.003
+
+
+def test_occupied_socket_filtered():
+    """When a peg is placed inside a socket, that socket should not be reported as available."""
+    cam = list(CALIB["cameras"])[0]
+    T = np.array(CALIB["cameras"][cam]["T_base_cam"], float)
+    bgr, depth, K, truth = make_scene(T, table_z=TASK["table_z"], seed=0, noise_mm=1.0)
+    res = process_frame(bgr, depth, K, T, COLORS, TASK, cam)
+    assert len(res["sockets"]) == 4
+
+    # Move one peg directly into its socket
+    sock = res["sockets"][0]
+    peg = res["pegs"][0]
+    peg["x"] = sock["x"]
+    peg["y"] = sock["y"]
+    peg["z_top"] = sock["z_top"] + 0.10
+
+    # Verify via fuse
+    fused = fuse([res], TASK["vision"]["fuse_merge_dist"])
+    assert len(fused["sockets"]) == 3
+    assert not any(math.hypot(s["x"] - sock["x"], s["y"] - sock["y"]) < 0.02 for s in fused["sockets"])
+
+
+def test_peg_depth_fallback():
+    """If depth is missing/zero on pegs, vision should fallback to ray projection at known height."""
+    cam = list(CALIB["cameras"])[0]
+    T = np.array(CALIB["cameras"][cam]["T_base_cam"], float)
+    bgr, depth, K, truth = make_scene(T, table_z=TASK["table_z"], seed=1, noise_mm=1.0)
+    # Zero out depth completely
+    zero_depth = np.zeros_like(depth)
+    res = process_frame(bgr, zero_depth, K, T, COLORS, TASK, cam)
+    assert len(res["pegs"]) == 4
+    for t in truth["pegs"]:
+        d = next(p for p in res["pegs"] if p["color"] == t["color"])
+        # Should be within ~1.5 cm even with zero depth
+        assert math.hypot(d["x"] - t["x"], d["y"] - t["y"]) < 0.025
+

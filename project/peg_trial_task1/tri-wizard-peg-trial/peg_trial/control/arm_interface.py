@@ -42,7 +42,7 @@ class ArmInterface:
         self.estop_pub = node.create_publisher(Bool, ESTOP_TOPIC, 10)
 
         if self.backend == "dry_run":
-            self._q = [0.0, -1.05, 0.35, 0.70]
+            self._q = [0.0, -0.84, -0.10, 0.94]
         else:
             node.create_subscription(JointState, robot_cfg["joint_states_topic"], self._on_js, 10)
 

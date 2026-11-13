@@ -95,6 +95,13 @@ def classify_shape(contour, eps_frac: float = 0.03):
     d = {s: math.sqrt(sum(w * (f - i) ** 2 for w, f, i in zip(WEIGHTS, feats, IDEAL[s]))) for s in IDEAL}
     ranked = sorted(d, key=d.get)
     shape = ranked[0]
+    # Disambiguate hexagon vs circle: a true hexagon has 6 distinct corners/vertices.
+    # An ellipse (circle viewed under perspective tilt) has smooth curvature and cannot form 6 vertices.
+    if shape == "hexagon" and ranked[1] == "circle":
+        peri = cv2.arcLength(hull, True)
+        has_6 = any(len(cv2.approxPolyDP(hull, e * peri, True)) == 6 for e in (0.015, 0.02, 0.03, 0.04, 0.05))
+        if not has_6:
+            shape = "circle"
     conf = max(0.0, min(1.0, (d[ranked[1]] - d[shape]) / (d[ranked[1]] + 1e-9) * 1.5))
     return shape, np.asarray(corner_points(shape, hull, eps_frac), float), conf
 
