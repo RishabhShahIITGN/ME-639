@@ -154,20 +154,28 @@ The task supervisor executes a deterministic 7-phase finite state machine:
 
 Directly commanding large Cartesian displacements causes erratic, high-velocity joint swings. To enforce smooth, predictable trajectories:
 1. **Straight-Line Breadcrumb Interpolation:**
-   Trajectories are discretized into intermediate waypoints at constant Cartesian velocity $v_{move} = 0.03\text{ m/s}$:
-   $$T_{move} = \max\left(\frac{D}{v_{move}}, \, T_{min}\right), \quad N_{steps} = \max\left(1, \, \left\lfloor\frac{T_{move}}{\Delta t_{IK}}\right\rfloor\right)$$
-   $$p_d(\alpha_i) = p_{start} + \alpha_i (p_{target} - p_{start}), \quad q_d(\alpha_i) = \text{SLERP}(q_{start}, q_{target}, \alpha_i)$$
-   where $\alpha_i = i / N_{steps}$ and $\Delta t_{IK} = 0.01\text{ s}$.
+   Trajectories are discretized into intermediate waypoints at constant Cartesian velocity $v_{\mathrm{move}} = 0.03\text{ m/s}$:
+
+   $$T_{\mathrm{move}} = \max\left(\frac{D}{v_{\mathrm{move}}}, \, T_{\min}\right), \quad N_{\mathrm{steps}} = \max\left(1, \, \left\lfloor\frac{T_{\mathrm{move}}}{\Delta t_{IK}}\right\rfloor\right)$$
+
+   $$p_d(\alpha_i) = p_{\mathrm{start}} + \alpha_i (p_{\mathrm{target}} - p_{\mathrm{start}}), \quad q_d(\alpha_i) = \text{SLERP}(q_{\mathrm{start}}, q_{\mathrm{target}}, \alpha_i)$$
+
+   where $\alpha_i = i / N_{\mathrm{steps}}$ and $\Delta t_{IK} = 0.01\text{ s}$.
+
 2. **Task-Space Error Clamping:**
-   The 6D task-space error $e = [\Delta p^T, \Delta \theta^T]^T \in \mathbb{R}^6$ is clamped to $e_{max} = 0.02\text{ m/rad}$ before computing desired velocity:
-   $$\bar{e} = e \cdot \min\left(1, \, \frac{e_{max}}{\|e\|_2}\right), \quad \dot{x}_d = \frac{\bar{e}}{\Delta t_{IK}}$$
+   The 6D task-space error $e = [\Delta p^T, \Delta \theta^T]^T \in \mathbb{R}^6$ is clamped to $e_{\max} = 0.02\text{ m/rad}$ before computing desired velocity:
+
+   $$\bar{e} = e \cdot \min\left(1, \, \frac{e_{\max}}{\|e\|_2}\right), \quad \dot{x}_d = \frac{\bar{e}}{\Delta t_{IK}}$$
 
 ---
 
 ### 1. Off-the-Shelf Differential IK (Mink)
 [Mink](https://github.com/kevinzakka/mink) formulates differential IK as a configuration-space quadratic optimization problem:
+
 $$\min_{\Delta q} \frac{1}{2} \| J(q) \Delta q - e_x \|_W^2 + \frac{1}{2} \| \Delta q \|_{R}^2$$
-$$\text{subject to } \Delta q_{min} \le \Delta q \le \Delta q_{max}, \quad C \Delta q \le d$$
+
+$$\text{subject to } \Delta q_{\min} \le \Delta q \le \Delta q_{\max}, \quad C \Delta q \le d$$
+
 - Incorporates end-effector frame tracking, posture regularization, and `mink.CollisionAvoidanceLimit` linear distance inequalities.
 - Solved at each control step via OSQP.
 
@@ -175,15 +183,21 @@ $$\text{subject to } \Delta q_{min} \le \Delta q \le \Delta q_{max}, \quad C \De
 
 ### 2. Closed-Loop Damped Least Squares (DLS)
 Near kinematic singularities where $J$ loses rank, standard pseudo-inversion explodes. The Levenberg–Marquardt formulation simultaneously minimizes task tracking error and penalizes excessive joint velocities:
+
 $$\mathcal{J}(\dot{q}) = \|J\dot{q} - \dot{x}_d\|_2^2 + \lambda \|\dot{q}\|_2^2$$
+
 Expanding and setting the gradient to zero yields the analytical closed-form solution:
-$$\dot{q}_{task} = \left( J^T J + \lambda I_n \right)^{-1} J^T \dot{x}_d = J_{DLS}^\dagger \dot{x}_d$$
+
+$$\dot{q}_{\mathrm{task}} = \left( J^T J + \lambda I_n \right)^{-1} J^T \dot{x}_d = J_{\mathrm{DLS}}^\dagger \dot{x}_d$$
+
 where $\lambda = d^2$ with $d = 10^{-2}$.
 
 #### Redundancy Resolution (7-DOF Franka Panda)
-For the 7-DOF arm, an explicit null-space projector drives the redundant elbow toward a safe resting posture $q_{def}$ without perturbing end-effector tracking:
-$$\dot{q} = \dot{q}_{task} + \left( I_n - J_{DLS}^\dagger J \right) k_{null} (q_{def} - q)$$
-where $k_{null} = 0.5\text{ s}^{-1}$ and velocities are saturated to physical limits $[-2.0, 2.0]\text{ rad/s}$.
+For the 7-DOF arm, an explicit null-space projector drives the redundant elbow toward a safe resting posture $q_{\mathrm{def}}$ without perturbing end-effector tracking:
+
+$$\dot{q} = \dot{q}_{\mathrm{task}} + \left( I_n - J_{\mathrm{DLS}}^\dagger J \right) k_{\mathrm{null}} (q_{\mathrm{def}} - q)$$
+
+where $k_{\mathrm{null}} = 0.5\text{ s}^{-1}$ and velocities are saturated to physical limits $[-2.0, 2.0]\text{ rad/s}$.
 
 ---
 

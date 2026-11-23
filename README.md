@@ -74,7 +74,9 @@ An interactive, browser-based 3D visualization laboratory built with Three.js (r
 * **Demonstration Video:** [Watch on YouTube](https://youtu.be/QE0hZ7LaZYM)
 * **Mathematical Features:**
   - Standard aerospace **$X$-$Y$-$Z$ Intrinsic Euler Angles** ($\text{Roll } \phi \to \text{Pitch } \theta \to \text{Yaw } \psi$) composed via post-multiplication:
+
     $$R = R_x(\phi) \cdot R_y(\theta) \cdot R_z(\psi)$$
+
   - Real-time point transformation engine: $P_{\text{world}} = R \cdot P_{\text{body}}$.
   - Continuous matrix validation: Orthogonality ($R^T R = I$) and proper rotation determinant ($\det(R) = +1$).
   - Conversion between Rotation Matrices, Unit Quaternions ($q_w, q_x, q_y, q_z$), and Axis-Angle representations ($\theta, \hat{\omega}$).
@@ -84,6 +86,7 @@ An interactive, browser-based 3D visualization laboratory built with Three.js (r
 A MuJoCo simulation environment (`model/asymmetric_body.xml`) evaluating 3D rotation mechanics:
 * Numerical and visual demonstration of **current body-frame** vs. **fixed space-frame** rotation compositions.
 * Lie algebraic verification of skew-symmetric properties for $so(3)$:
+
   $$\hat{\omega}^T = -\hat{\omega}, \quad \hat{\omega} v = \omega \times v, \quad R \hat{\omega} R^T = \widehat{R\omega}$$
 
 ---
@@ -101,9 +104,13 @@ A MuJoCo simulation environment (`model/asymmetric_body.xml`) evaluating 3D rota
 * **6-DOF Addverb HEAL (`spawn_heal.py`) & 7-DOF Franka Panda (`spawn_franka.py`):**
   - Live Tkinter joint-slider GUI controlling physical joint angles.
   - Analytical Forward Kinematics derived from DH / body transform chains compared against MuJoCo simulation positions:
+
     $$\Delta p = \|p_{\text{analytical}} - p_{\text{simulated}}\|_2 < 10^{-4}\text{ m}$$
+
   - Spatial Geometric Jacobian computation ($J \in \mathbb{R}^{6 \times n}$) and instantaneous end-effector Cartesian velocity tracking:
+
     $$\dot{x} = J(q) \dot{q}$$
+
   - Gravity compensation feedforward via `qfrc_bias`.
 * 🎥 **Demonstration:** [Watch Video (Lab 02)](https://youtu.be/GwFLrIUo620?si=YbysZpMFHA-QoY82)
 
@@ -122,10 +129,15 @@ A custom ergonomic table ($0.34\text{ m} \times 0.60\text{ m} \times 0.04\text{ 
 $$\text{[APPROACH]} \to \text{[DESCEND]} \to \text{[GRASP]} \to \text{[LIFT]} \to \text{[TRANSIT]} \to \text{[LOWER]} \to \text{[RELEASE]}$$
 
 #### Inverse Kinematics Formulations
-1. **Mink (Baseline Optimizer):** Differential IK formulated as an OSQP optimization problem with quadratic task tracking, velocity bounds, and linear obstacle distance inequality constraints ($C \Delta q \le d$).
-2. **Custom Damped Least Squares (DLS):** Closed-loop Levenberg–Marquardt solver with task error clamping ($e_{\text{max}} = 0.02$) and null-space posture projection for 7-DOF redundancy resolution:
-   $$\dot{q} = J_{DLS}^\dagger \dot{x}_d + \left(I_n - J_{DLS}^\dagger J\right) k_{\text{null}} (q_{\text{def}} - q)$$
-3. **Custom Quadratic Programming (QP):** Box-constrained QP strictly satisfying hardware velocity saturation ($\pm 2.0\text{ rad/s}$) and joint limits via regularized positive-definite Hessian $P = J^T J + \lambda I_n$.
+
+- **Mink (Baseline Optimizer):** Differential IK formulated as an OSQP optimization problem with quadratic task tracking, velocity bounds, and linear obstacle distance inequality constraints ($C \Delta q \le d$).
+
+- **Custom Damped Least Squares (DLS):** Closed-loop Levenberg–Marquardt solver with task error clamping ($e_{\max} = 0.02$) and null-space posture projection for 7-DOF redundancy resolution:
+
+  $$\dot{q} = J_{\mathrm{DLS}}^\dagger \dot{x}_d + \left(I_n - J_{\mathrm{DLS}}^\dagger J\right) k_{\mathrm{null}} (q_{\mathrm{def}} - q)$$
+
+- **Custom Quadratic Programming (QP):** Box-constrained QP strictly satisfying hardware velocity saturation ($\pm 2.0\text{ rad/s}$) and joint limits via regularized positive-definite Hessian $P = J^T J + \lambda I_n$.
+
 
 #### Quantitative Benchmark Results (Seed 19)
 
