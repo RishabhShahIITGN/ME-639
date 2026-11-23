@@ -220,3 +220,10 @@ __marimo__/
 build/
 install/
 log/
+
+# MuJoCo runtime logs
+MUJOCO_LOG.TXT
+
+# Large archives (safeguard against GitHub 100MB file limit)
+*.zip
+*.tar.gz
